@@ -118,7 +118,7 @@ class Classifer(pl.LightningModule):
     def configure_optimizers(self):
         ########################
         self.opt = torch.optim.Adam(self.parameters(), lr=self.init_lr)
-        return [self.opt]
+        return self.opt
 
 
 
