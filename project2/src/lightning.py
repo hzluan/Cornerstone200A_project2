@@ -151,12 +151,13 @@ class MLP(Classifer):
         return self.network(x)
 
 class ResNet18(Classifer):
-    def __init__(self, num_classes=9, init_lr = 1e-3, **kwargs):
+    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
         #######################################
-        self.network = torchvision.models.resnet18(pretrained=True)
+        self.pretrained = pretrained
+        self.network = torchvision.models.resnet18(self.pretrained)
 
     def forward(self, x):
         #######################################
