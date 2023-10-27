@@ -9,3 +9,4 @@ pydicom
 tqdm
 lightning[pytorch-extra]
 lifelines
+SimpleITK

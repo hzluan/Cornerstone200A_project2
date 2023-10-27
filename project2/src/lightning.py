@@ -13,7 +13,7 @@ class Classifer(pl.LightningModule):
         self.num_classes = num_classes
 
         # Define loss fn for classifier
-        self.loss = None
+        self.loss = nn.CrossEntropyLoss()
 
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.auc = torchmetrics.AUROC(task="binary" if self.num_classes == 2 else "multiclass", num_classes=self.num_classes)
@@ -30,14 +30,18 @@ class Classifer(pl.LightningModule):
             x, y = batch["x"], batch["y_seq"][:,0]
         return x, y.to(torch.long).view(-1)
 
+    def forward(self, x):
+        x = torch.softmax(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
     def training_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
 
         ## TODO: get predictions from your model and store them as y_hat
-        y_hat = None
-        raise NotImplementedError("Not implemented yet")
-
-        loss = None
+        y_hat = self.forward(x)
+        
+        loss = self.loss(y_hat, y)
 
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         self.log('train_loss', loss, prog_bar=True)
@@ -52,7 +56,8 @@ class Classifer(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
 
-        raise NotImplementedError("Not implemented yet")
+        y_hat = self.forward(x)
+        loss = self.loss(y_hat, y)
 
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -65,7 +70,9 @@ class Classifer(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
-        raise NotImplementedError("Not implemented yet")
+    
+        y_hat = self.forward(x)
+        loss = self.loss(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -109,7 +116,7 @@ class Classifer(pl.LightningModule):
 
     def configure_optimizers(self):
         ## TODO: Define your optimizer and learning rate scheduler here (hint: Adam is a good default)
-        raise NotImplementedError("Not implemented yet")
+         return torch.optim.Adam(self.parameters(), lr=self.init_lr)
 
 
 
@@ -121,14 +128,24 @@ class MLP(Classifer):
         self.hidden_dim = hidden_dim
         self.use_bn = use_bn
 
+        all_layers = [nn.Flatten()]
+        input_size = input_dim
+        for _ in range(num_layers):
+            layer = nn.Linear(input_size, hidden_dim)
+            all_layers.append(layer)
+            all_layers.append(nn.ReLU())
+            input_size = hidden_dim
 
-        raise NotImplementedError("Not implemented yet")
+        if self.use_bn:
+            all_layers.append(nn.BatchNorm1d(input_size))
+        all_layers.append(nn.Linear(input_size, num_classes)) 
+        self.model = nn.Sequential(*all_layers)
 
 
     def forward(self, x):
         batch_size, channels, width, height = x.size()
-        raise NotImplementedError("Not implemented yet")
-        return None
+        x = self.model(x)
+        return x
 
 
 NLST_CENSORING_DIST = {

@@ -36,7 +36,12 @@ class PathMnist(pl.LightningDataModule):
         ])
         if self.use_data_augmentation:
             # TODO: Implement some data augmentatons
-            self.train_transform = None
+            self.train_transform = torchvision.transforms.Compose([
+                torchvision.transforms.RandomRotation(degrees=(0, 180)),
+                torchvision.transforms.RandomHorizontalFlip(p=0.5),
+                torchvision.transforms.RandomPerspective(),
+                torchvision.transforms.ToTensor()
+            ])
             raise NotImplementedError("Not implemented yet")
         else:
             self.train_transform = torchvision.transforms.Compose([
