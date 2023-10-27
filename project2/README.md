@@ -1,4 +1,4 @@
-
+module load CBI miniconda3/23.3.1-0-py39
 # Predicting Lung Cancer from Low-Dose CT Scans
 #### CPH 200A Project 2
 #### Due Date: 5PM PST Nov 16, 2023
