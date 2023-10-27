@@ -133,6 +133,8 @@ class MLP(Classifer):
         for _ in range(num_layers):
             layer = nn.Linear(input_size, hidden_dim)
             all_layers.append(layer)
+            if self.use_bn:
+                all_layers.append(nn.BatchNorm1d(input_size))
             all_layers.append(nn.ReLU())
             input_size = hidden_dim
 
