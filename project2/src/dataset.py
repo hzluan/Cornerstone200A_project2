@@ -34,10 +34,16 @@ class PathMnist(pl.LightningDataModule):
         self.test_transform = torchvision.transforms.Compose([
             torchvision.transforms.ToTensor()
         ])
+        #########################################
         if self.use_data_augmentation:
-            # TODO: Implement some data augmentatons
-            self.train_transform = None
-            raise NotImplementedError("Not implemented yet")
+            transforms_dict = [
+            tio.RandomAffine(),
+            tio.RandomElasticDeformation(),
+            tio.RandomFlip(),
+            tio.RandomAffine(scales=(0.9, 1.2),degrees=15,),
+            tio.RandomNoise()
+        ]
+            self.train_transform = tio.OneOf(transforms_dict)
         else:
             self.train_transform = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor()
@@ -122,12 +128,23 @@ class NLST(pl.LightningDataModule):
         self.train_transform = tio.transforms.Compose([
             resample,
             padding,
-            resize
+            resize,
         ])
 
+        ##########################################
         if self.use_data_augmentation:
-            # TODO: Support some data augmentations. Hint: consider using torchio.
-            raise NotImplementedError("Not implemented yet")
+            transforms_dict = [
+            tio.RandomAffine(),
+            tio.RandomElasticDeformation(),
+            tio.RandomFlip(),
+            tio.RandomAffine(scales=(0.9, 1.2),degrees=15,),
+            tio.RandomNoise()
+        ]
+            self.train_transform = tio.OneOf(transforms_dict)
+        else:
+            self.train_transform = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor()
+            ])
 
 
         self.test_transform = tio.transforms.Compose([

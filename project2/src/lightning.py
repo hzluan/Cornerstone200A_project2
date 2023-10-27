@@ -13,7 +13,8 @@ class Classifer(pl.LightningModule):
         self.num_classes = num_classes
 
         # Define loss fn for classifier
-        self.loss = None
+        ######################################
+        self.loss = nn.CrossEntropyLoss()
 
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.auc = torchmetrics.AUROC(task="binary" if self.num_classes == 2 else "multiclass", num_classes=self.num_classes)
@@ -34,10 +35,9 @@ class Classifer(pl.LightningModule):
         x, y = self.get_xy(batch)
 
         ## TODO: get predictions from your model and store them as y_hat
-        y_hat = None
-        raise NotImplementedError("Not implemented yet")
-
-        loss = None
+        ###################################################
+        y_hat = self.forward(x)
+        loss = self.loss(y_hat, y)
 
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         self.log('train_loss', loss, prog_bar=True)
@@ -51,8 +51,9 @@ class Classifer(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
-
-        raise NotImplementedError("Not implemented yet")
+        #################################################
+        y_hat = self.forward(x)
+        loss = self.loss(y_hat, y)
 
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -65,7 +66,9 @@ class Classifer(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
-        raise NotImplementedError("Not implemented yet")
+        ###############################
+        y_hat = self.forward(x)
+        loss = self.loss(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -75,6 +78,7 @@ class Classifer(pl.LightningModule):
             "y": y
         })
         return loss
+    
     def on_train_epoch_end(self):
         y_hat = torch.cat([o["y_hat"] for o in self.training_outputs])
         y = torch.cat([o["y"] for o in self.training_outputs])
@@ -120,15 +124,26 @@ class MLP(Classifer):
 
         self.hidden_dim = hidden_dim
         self.use_bn = use_bn
+        #######################################
+        layers = []
 
 
-        raise NotImplementedError("Not implemented yet")
+        for _ in range(num_layers):
+            layers.append(nn.Linear(input_dim, hidden_dim))
+            if self.use_bn:
+                layers.append(nn.BatchNorm1d(hidden_dim))
+            layers.append(nn.ReLU())
+            input_dim = hidden_dim
+        
+        layers.append(nn.Linear(hidden_dim, num_classes))
+        self.network = nn.Sequential(*layers)
 
 
     def forward(self, x):
+        #######################################
         batch_size, channels, width, height = x.size()
-        raise NotImplementedError("Not implemented yet")
-        return None
+        x = x.view(batch_size, -1)
+        return self.network(x)
 
 
 NLST_CENSORING_DIST = {
