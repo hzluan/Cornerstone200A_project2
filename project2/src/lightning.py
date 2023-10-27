@@ -116,8 +116,9 @@ class Classifer(pl.LightningModule):
         self.test_outputs = []
 
     def configure_optimizers(self):
-        ## TODO: Define your optimizer and learning rate scheduler here (hint: Adam is a good default)
-        raise NotImplementedError("Not implemented yet")
+        ########################
+        self.opt = torch.optim.Adam(self.parameters(), lr=self.init_lr)
+        return [self.opt]
 
 
 
