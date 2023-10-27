@@ -4,7 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics
 import torchvision
+from torchvision.models import resnet18
 from src.cindex import concordance_index
+
+model1 = resnet18(pretrained=True)
+
 
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4):
@@ -143,6 +147,18 @@ class MLP(Classifer):
         #######################################
         batch_size, channels, width, height = x.size()
         x = x.view(batch_size, -1)
+        return self.network(x)
+
+class ResNet18(Classifer):
+    def __init__(self, num_classes=9, init_lr = 1e-3, **kwargs):
+        super().__init__(num_classes=num_classes, init_lr=init_lr)
+        self.save_hyperparameters()
+
+        #######################################
+        self.network = torchvision.models.resnet18(pretrained=True)
+
+    def forward(self, x):
+        #######################################
         return self.network(x)
 
 
