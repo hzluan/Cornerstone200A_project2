@@ -113,6 +113,11 @@ class Classifer(pl.LightningModule):
             probs = F.softmax(y_hat, dim=-1)
 
         self.log("test_auc", self.auc(probs, y.view(-1)), sync_dist=True, prog_bar=True)
+        # log hyperparameters
+        
+
+
+        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
         self.test_outputs = []
 
     def configure_optimizers(self):
