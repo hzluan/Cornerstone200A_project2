@@ -41,6 +41,9 @@ In doing so, explore the impact of model depth (i.e num layers), batch normaliza
 Your best model should be able to reach a validation accuracy of at least 99%. In your project report, include plots comparing the model variants and the impact of the design choices you explored.
 
 #### Ideas: 
+* Comparing Pydicom and SimpleITK:
+  - Pydicom allows modification of metadata in dicom data such as patient information, study details, and other metadata without affecting the image data.
+  - SimpleITK has built-ins for image processing tools such as filtering, segmentation and registration.
 * Can we use autoencoder structure for MLP/CNN models?
 * lightning has builtin Resnet-18 model. See [this](https://www.kaggle.com/code/stpeteishii/cifar10-resnet18-pytorch-lightning).
 

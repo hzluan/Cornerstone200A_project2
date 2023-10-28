@@ -13,6 +13,7 @@ class Classifer(pl.LightningModule):
         self.num_classes = num_classes
 
         # Define loss fn for classifier
+        ######################################
         self.loss = nn.CrossEntropyLoss()
 
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
@@ -39,8 +40,8 @@ class Classifer(pl.LightningModule):
         x, y = self.get_xy(batch)
 
         ## TODO: get predictions from your model and store them as y_hat
+        ###################################################
         y_hat = self.forward(x)
-        
         loss = self.loss(y_hat, y)
 
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
@@ -55,7 +56,7 @@ class Classifer(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
-
+        #################################################
         y_hat = self.forward(x)
         loss = self.loss(y_hat, y)
 
@@ -70,7 +71,7 @@ class Classifer(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
-    
+        ###############################
         y_hat = self.forward(x)
         loss = self.loss(y_hat, y)
 
@@ -82,6 +83,7 @@ class Classifer(pl.LightningModule):
             "y": y
         })
         return loss
+    
     def on_train_epoch_end(self):
         y_hat = torch.cat([o["y_hat"] for o in self.training_outputs])
         y = torch.cat([o["y"] for o in self.training_outputs])
@@ -127,26 +129,24 @@ class MLP(Classifer):
 
         self.hidden_dim = hidden_dim
         self.use_bn = use_bn
+        #######################################
+        layers = [nn.Flatten()]
 
-        all_layers = [nn.Flatten()]
-        input_size = input_dim
         for _ in range(num_layers):
-            layer = nn.Linear(input_size, hidden_dim)
-            all_layers.append(layer)
+            layers.append(nn.Linear(input_dim, hidden_dim))
             if self.use_bn:
-                all_layers.append(nn.BatchNorm1d(input_size))
-            all_layers.append(nn.ReLU())
-            input_size = hidden_dim
-
-        if self.use_bn:
-            all_layers.append(nn.BatchNorm1d(input_size))
-        all_layers.append(nn.Linear(input_size, num_classes)) 
-        self.model = nn.Sequential(*all_layers)
+                layers.append(nn.BatchNorm1d(hidden_dim))
+            layers.append(nn.ReLU())
+            input_dim = hidden_dim
+        
+        layers.append(nn.Linear(hidden_dim, num_classes))
+        self.network = nn.Sequential(*layers)
 
 
     def forward(self, x):
+        #######################################
         batch_size, channels, width, height = x.size()
-        x = self.model(x)
+        x = self.network(x)
         return x
 
 
