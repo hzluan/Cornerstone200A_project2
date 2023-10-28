@@ -95,7 +95,6 @@ def main(args: argparse.Namespace):
 
     print("Initializing trainer")
     logger = pl.loggers.WandbLogger(project=args.project_name)
-
     args.trainer.accelerator = 'auto'
     args.trainer.logger = logger
     args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended
@@ -113,6 +112,16 @@ def main(args: argparse.Namespace):
         print("Training model")
         trainer.fit(model, datamodule)
 
+    ######################
+    # Log hyperparameters
+    if args.model_name == 'mlp':
+        hyparam = {'init_lr': args.init_lr, 'num_layers': args.num_layers, 'hidden_dim': args.hidden_dim, 'use_bn': args.use_bn, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
+    elif args.model_name == 'cnn':
+        hyparam = {'num_layers': args.num_layers, 'hidden_dim': args.hidden_dim, 'use_bn': args.use_bn, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
+    elif args.model_name == 'resnet18':
+        hyparam = {'pretrained': args.pretrained, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
+    
+    logger.log_hyperparams(hyparam)
     print("Best model checkpoint path: ", trainer.checkpoint_callback.best_model_path)
 
     print("Evaluating model on validation set")
@@ -120,6 +129,7 @@ def main(args: argparse.Namespace):
 
     print("Evaluating model on test set")
     trainer.test(model, datamodule)
+
 
     print("Done")
 
