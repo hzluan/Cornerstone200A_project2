@@ -3,7 +3,8 @@
   "cnn.num_layers": [
     1,
     4,
-    8
+    8, 
+    16
   ],
   "cnn.hidden_dim": [
       128, 
@@ -19,10 +20,10 @@
     false
   ],
   "main.batch_size": [
-    512
+    512, 256, 128
   ],
   "trainer.max_epochs": [
-    100
+    100, 300, 500, 1000
   ],
   "main.model_name": [
     "cnn"

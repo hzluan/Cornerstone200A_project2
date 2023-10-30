@@ -4,7 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics
 import torchvision
+from torchvision.models import resnet18
 from src.cindex import concordance_index
+
+model1 = resnet18(pretrained=True)
+
 
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4):
@@ -31,11 +35,6 @@ class Classifer(pl.LightningModule):
             x, y = batch["x"], batch["y_seq"][:,0]
         return x, y.to(torch.long).view(-1)
 
-    def forward(self, x):
-        x = torch.softmax(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
     def training_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
 
@@ -59,7 +58,6 @@ class Classifer(pl.LightningModule):
         #################################################
         y_hat = self.forward(x)
         loss = self.loss(y_hat, y)
-
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
 
@@ -117,8 +115,9 @@ class Classifer(pl.LightningModule):
         self.test_outputs = []
 
     def configure_optimizers(self):
-        ## TODO: Define your optimizer and learning rate scheduler here (hint: Adam is a good default)
-         return torch.optim.Adam(self.parameters(), lr=self.init_lr)
+        ########################
+        self.opt = torch.optim.Adam(self.parameters(), lr=self.init_lr)
+        return self.opt
 
 
 
@@ -130,7 +129,8 @@ class MLP(Classifer):
         self.hidden_dim = hidden_dim
         self.use_bn = use_bn
         #######################################
-        layers = [nn.Flatten()]
+        layers = []
+
 
         for _ in range(num_layers):
             layers.append(nn.Linear(input_dim, hidden_dim))
@@ -146,7 +146,26 @@ class MLP(Classifer):
     def forward(self, x):
         #######################################
         batch_size, channels, width, height = x.size()
-        x = self.network(x)
+        x = x.view(batch_size, -1)
+        return self.network(x)
+
+class ResNet18(Classifer):
+    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
+        super().__init__(num_classes=num_classes, init_lr=init_lr)
+        self.save_hyperparameters()
+
+        #######################################
+        self.pretrained = pretrained
+        if self.pretrained:
+            self.resnet = torchvision.models.resnet18(weights='DEFAULT')
+        else:
+            self.resnet = torchvision.models.resnet18()
+
+        num_ftrs = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
+    def forward(self, x):
+        #######################################
+        x = self.resnet(x)
         return x
 
 

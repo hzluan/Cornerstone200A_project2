@@ -4,14 +4,15 @@ import sys
 from os.path import dirname, realpath
 
 sys.path.append(dirname(dirname(realpath(__file__))))
-from src.lightning import MLP, RiskModel
+from src.lightning import MLP, RiskModel, ResNet18
 from src.dataset import PathMnist, NLST
 from lightning.pytorch.cli import LightningArgumentParser
 import lightning.pytorch as pl
 
 NAME_TO_MODEL_CLASS = {
     "mlp": MLP,
-    "risk_model": RiskModel
+    "risk_model": RiskModel,
+    "resnet18": ResNet18,
 }
 
 NAME_TO_DATASET_CLASS = {
@@ -54,7 +55,7 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
 
     parser.add_argument(
         "--train",
-        default=True,
+        default=False,
         action="store_true",
         help="Whether to train the model."
     )
@@ -94,7 +95,6 @@ def main(args: argparse.Namespace):
 
     print("Initializing trainer")
     logger = pl.loggers.WandbLogger(project=args.project_name)
-
     args.trainer.accelerator = 'auto'
     args.trainer.logger = logger
     args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended
@@ -119,6 +119,7 @@ def main(args: argparse.Namespace):
 
     print("Evaluating model on test set")
     trainer.test(model, datamodule)
+
 
     print("Done")
 

@@ -10,13 +10,13 @@
     false
   ],
   "main.batch_size": [
-    512
+    512, 256, 128
   ],
   "trainer.max_epochs": [
-    100
+    100, 300, 500, 1000
   ],
   "main.model_name": [
-    "resnet"
+    "resnet18"
   ] 
 
 }
