@@ -4,23 +4,31 @@ import random
 import os, subprocess
 from csv import DictWriter
 import multiprocessing
+import sys
+from os.path import dirname, realpath
 
-from csv import DictReader
-from vectorizer import Vectorizer
-from logistic_regression import LogisticRegression
+sys.path.append(dirname(dirname(realpath(__file__))))
+from src.lightning import MLP, RiskModel
+from src.dataset import PathMnist, NLST
+from lightning.pytorch.cli import LightningArgumentParser
+import lightning.pytorch as pl
 import json
 from sklearn.metrics import roc_auc_score
 import numpy as np
 import time
-import random
 
-def add_main_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument(
-        "--plco_data_path",
-        default="lung_prsn.csv",
-        help="Location of PLCO csv",
-    )
+NAME_TO_MODEL_CLASS = {
+    "mlp": MLP,
+    "risk_model": RiskModel
+}
 
+NAME_TO_DATASET_CLASS = {
+    "pathmnist": PathMnist,
+    "nlst": NLST
+}
+
+def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
+   
     parser.add_argument(
         "--config_path",
         type=str,
@@ -48,7 +56,54 @@ def add_main_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Where to save grid search results"
     )
 
+    parser.add_argument(
+        "--model_name",
+        default="mlp",
+        help="Name of model to use. Options include: mlp, cnn, resnet",
+    )
+
+    parser.add_argument(
+        "--dataset_name",
+        default="pathmnist",
+        help="Name of dataset to use. Options: pathmnist, nlst"
+    )
+
+    parser.add_argument(
+        "--project_name",
+        default="cornerstone",
+        help="Name of project for wandb"
+    )
+
+    parser.add_argument(
+        "--monitor_key",
+        default="val_loss",
+        help="Name of metric to use for checkpointing. (e.g. val_loss, val_acc)"
+    )
+
+    parser.add_argument(
+        "--checkpoint_path",
+        default=None,
+        help="Path to checkpoint to load from. If None, init from scratch."
+    )
+
+    parser.add_argument(
+        "--train",
+        default=True,
+        action="store_true",
+        help="Whether to train the model."
+    )
     return parser
+
+def parse_args() -> argparse.Namespace:
+    parser = LightningArgumentParser()
+    parser.add_lightning_class_args(pl.Trainer, nested_key="trainer")
+    for model_name, model_class in NAME_TO_MODEL_CLASS.items():
+        parser.add_lightning_class_args(model_class, nested_key=model_name)
+    for dataset_name, data_class in NAME_TO_DATASET_CLASS.items():
+        parser.add_lightning_class_args(data_class, nested_key=dataset_name)
+    parser = add_main_args(parser)
+    args = parser.parse_args()
+    return args
 
 import itertools
 def get_experiment_list(config: dict) -> list:
@@ -115,61 +170,43 @@ def load_data(args: argparse.Namespace) -> ([list, list, list]):
         
         
 def launch_experiment(args: argparse.Namespace, experiment_config: dict) ->  dict:
-    '''
-    Launch an experiment and direct logs and results to a unique filepath.
-    :configs: flags to use for this model run. Will be fed into
-    scripts/main.py
+ print("Initializing model")
+    ## TODO: Implement your deep learning methods
+    datamodule = NAME_TO_DATASET_CLASS[args.dataset_name](**vars(args[args.dataset_name]))
 
-    returns: flags for this experiment as well as result metrics
-    '''
+    if args.checkpoint_path is None:
+        model = NAME_TO_MODEL_CLASS[args.model_name](**vars(args[args.model_name]))
+    else:
+        model = NAME_TO_MODEL_CLASS[args.model_name].load_from_checkpoint(args.checkpoint_path)
 
-    if not os.path.isdir(args.log_dir):
-        os.makedirs(args.log_dir)
+    print("Initializing trainer")
+    logger = pl.loggers.WandbLogger(project=args.project_name)
 
-    # TODO: Launch the experiment
-    train, val, test = load_data(args)
+    args.trainer.accelerator = 'auto'
+    args.trainer.logger = logger
+    args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended
 
-    feature_config = {
-        'age': 0
-    }
-    
-    plco_vectorizer = Vectorizer(feature_config)
-    plco_vectorizer.fit(train)
+    args.trainer.callbacks = [
+        pl.callbacks.ModelCheckpoint(
+            monitor=args.monitor_key,
+            mode='min' if "loss" in args.monitor_key else "max",
+            save_last=True
+        )]
 
-    train_X = plco_vectorizer.transform(train)
-    val_X = plco_vectorizer.transform(val)
-    test_X = plco_vectorizer.transform(test)
+    trainer = pl.Trainer(**vars(args.trainer))
 
-    train_Y = np.array([int(r["lung_cancer"]) for r in train])
-    val_Y = np.array([int(r["lung_cancer"]) for r in val])
-    test_Y = np.array([int(r["lung_cancer"]) for r in test])
+    if args.train:
+        print("Training model")
+        trainer.fit(model, datamodule)
 
-    model = LogisticRegression(num_epochs=experiment_config['num_epochs'], learning_rate=experiment_config['learning_rate'], 
-                                batch_size=experiment_config['batch_size'], regularization_lambda=experiment_config['regularization_lambda'], verbose=True)
+    print("Best model checkpoint path: ", trainer.checkpoint_callback.best_model_path)
 
-    model.fit(train_X, train_Y, val_X, val_Y)
-    # TODO: Parse the results from the experiment and return them as a dict
+    print("Evaluating model on validation set")
+    trainer.validate(model, datamodule)
 
-    pred_train_Y = model.predict_proba(train_X)#[:,-1]
-    pred_val_Y = model.predict_proba(val_X)#[:,-1]
-
-    results = {
-        "num_epochs": experiment_config['num_epochs'], 
-        "learning_rate": experiment_config['learning_rate'], 
-        "batch_size": experiment_config['batch_size'], 
-        "regularization_lambda": experiment_config['regularization_lambda'],
-        "train_auc": roc_auc_score(train_Y, pred_train_Y),
-        "val_auc": roc_auc_score(val_Y, pred_val_Y)
-    }
-    
-    results_path = os.path.join(args.log_dir, str(time.time()) + '_' + 'result.json')
-
-
-    json.dump(results, open(results_path, "w"), indent=True, sort_keys=True)
-
-    return results
-
-
+    print("Evaluating model on test set")
+    trainer.test(model, datamodule)
+ 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser = add_main_args(parser)

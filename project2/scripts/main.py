@@ -13,7 +13,10 @@ NAME_TO_MODEL_CLASS = {
     "mlp": MLP,
     "risk_model": RiskModel,
     "resnet18": ResNet18,
+<<<<<<< HEAD
     "cnn": CNN
+=======
+>>>>>>> liching
 }
 
 NAME_TO_DATASET_CLASS = {
@@ -113,16 +116,6 @@ def main(args: argparse.Namespace):
         print("Training model")
         trainer.fit(model, datamodule)
 
-    ######################
-    # Log hyperparameters
-    if args.model_name == 'mlp':
-        hyparam = {'init_lr': args.init_lr, 'num_layers': args.num_layers, 'hidden_dim': args.hidden_dim, 'use_bn': args.use_bn, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
-    elif args.model_name == 'cnn':
-        hyparam = {'num_layers': args.num_layers, 'hidden_dim': args.hidden_dim, 'use_bn': args.use_bn, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
-    elif args.model_name == 'resnet18':
-        hyparam = {'pretrained': args.pretrained, 'use_data_augmentation': args.use_data_augmentation, 'batch_size': args.batch_size, 'max_epochs': args.max_epochs}
-    
-    logger.log_hyperparams(hyparam)
     print("Best model checkpoint path: ", trainer.checkpoint_callback.best_model_path)
 
     print("Evaluating model on validation set")

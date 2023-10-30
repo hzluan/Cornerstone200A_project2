@@ -1,9 +1,9 @@
 # Log files
-project2/lightning_logs/
-project1/logs/
-project2/logs/
-project2/wandb/
-project2/cornerstone
+project2/script/lightning_logs/
+project2/script/logs/
+project2/script/logs/
+project2/script/wandb/
+project2/script/cornerstone
 *.swp
 *.swo
 *.p
@@ -15,6 +15,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 data/
+wandb/
+cornerstone/
+logs/
+lightning_logs/
 # C extensions
 *.so
 

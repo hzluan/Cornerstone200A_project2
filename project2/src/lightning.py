@@ -58,7 +58,6 @@ class Classifer(pl.LightningModule):
         #################################################
         y_hat = self.forward(x)
         loss = self.loss(y_hat, y)
-
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
 
@@ -198,11 +197,17 @@ class ResNet18(Classifer):
 
         #######################################
         self.pretrained = pretrained
-        self.network = torchvision.models.resnet18(self.pretrained)
+        if self.pretrained:
+            self.resnet = torchvision.models.resnet18(weights='DEFAULT')
+        else:
+            self.resnet = torchvision.models.resnet18()
 
+        num_ftrs = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
     def forward(self, x):
         #######################################
-        return self.network(x)
+        x = self.resnet(x)
+        return x
 
 
 NLST_CENSORING_DIST = {
