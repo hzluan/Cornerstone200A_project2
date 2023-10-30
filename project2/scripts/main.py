@@ -4,7 +4,7 @@ import sys
 from os.path import dirname, realpath
 
 sys.path.append(dirname(dirname(realpath(__file__))))
-from src.lightning import MLP, RiskModel, ResNet18
+from src.lightning import MLP, RiskModel, ResNet18, CNN
 from src.dataset import PathMnist, NLST
 from lightning.pytorch.cli import LightningArgumentParser
 import lightning.pytorch as pl
@@ -12,7 +12,8 @@ import lightning.pytorch as pl
 NAME_TO_MODEL_CLASS = {
     "mlp": MLP,
     "risk_model": RiskModel,
-    "resnet18": ResNet18
+    "resnet18": ResNet18,
+    "cnn": CNN
 }
 
 NAME_TO_DATASET_CLASS = {

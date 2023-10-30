@@ -155,6 +155,42 @@ class MLP(Classifer):
         x = x.view(batch_size, -1)
         return self.network(x)
 
+#######################################
+class CNN(Classifer):
+    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=1, kernel_size=3, stride = 1, num_classes=9, use_bn=False, init_lr = 1e-3, **kwargs):
+        super().__init__(num_classes=num_classes, kernel_size=kernel_size, stride=stride)
+        self.save_hyperparameters()
+
+        self.out_chan = out_chan
+        self.use_bn = use_bn
+
+        layers = []
+        input_H = 28
+        output_H = 28
+
+        # TODO: Implement CNN
+        # use different number of layers, kernel size, strides
+        for _ in range(num_layers):
+            layers.append(nn.Conv2d(input_chan, out_chan, kernel_size=kernel_size, padding=1))
+            if self.use_bn:
+                layers.append(nn.BatchNorm2d(out_chan))
+            layers.append(nn.ReLU())
+            input_chan = out_chan
+            output_H = ( (input_H - kernel_size) // stride) + 1
+            input_H = output_H
+
+        # squeeze the spatial dimensions
+        layers.append(nn.Flatten())
+        # find dimensions of output
+        output_dim = output_H * output_H * out_chan
+        # append a linear layer with output sise of num_classes
+        layers.append(nn.Linear(output_dim, num_classes))
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.network(x)
+
 class ResNet18(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
