@@ -7,9 +7,6 @@ import torchvision
 from torchvision.models import resnet18
 from src.cindex import concordance_index
 
-model1 = resnet18(pretrained=True)
-
-
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4):
         super().__init__()
@@ -112,11 +109,6 @@ class Classifer(pl.LightningModule):
             probs = F.softmax(y_hat, dim=-1)
 
         self.log("test_auc", self.auc(probs, y.view(-1)), sync_dist=True, prog_bar=True)
-        # log hyperparameters
-        
-
-
-        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
         self.test_outputs = []
 
     def configure_optimizers(self):
@@ -154,14 +146,16 @@ class MLP(Classifer):
         x = x.view(batch_size, -1)
         return self.network(x)
 
-#######################################
+
 class CNN(Classifer):
-    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=1, kernel_size=3, stride = 1, num_classes=9, use_bn=False, init_lr = 1e-3, **kwargs):
-        super().__init__(num_classes=num_classes, kernel_size=kernel_size, stride=stride)
+    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride = 1, num_classes=9, use_bn=False, **kwargs):
+        super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
         self.out_chan = out_chan
         self.use_bn = use_bn
+        self.kernel_size = kernel_size
+        self.stride = stride
 
         layers = []
         input_H = 28
@@ -175,14 +169,14 @@ class CNN(Classifer):
                 layers.append(nn.BatchNorm2d(out_chan))
             layers.append(nn.ReLU())
             input_chan = out_chan
-            output_H = ( (input_H - kernel_size) // stride) + 1
+            output_H = (input_H + 2*1 - kernel_size) // stride + 1
             input_H = output_H
 
         # squeeze the spatial dimensions
         layers.append(nn.Flatten())
         # find dimensions of output
         output_dim = output_H * output_H * out_chan
-        # append a linear layer with output sise of num_classes
+        # append a linear layer with output size of num_classes
         layers.append(nn.Linear(output_dim, num_classes))
 
         self.network = nn.Sequential(*layers)
