@@ -8,6 +8,7 @@ from torchvision.models import resnet18
 from torchvision.models.video import r3d_18
 from torchvision.models.swin_transformer import swin_v2_b
 from src.cindex import concordance_index
+from pytorchvideo.models.slowfast import create_slow_r50
 
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4):
@@ -156,13 +157,14 @@ class CNN(Classifer):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        layers = []
+        blocks = []
         input_H = 28
         output_H = 28
 
         # TODO: Implement CNN
         # use different number of layers, kernel size, strides
         for _ in range(num_layers):
+            layers = []
             layers.append(nn.Conv2d(input_chan, out_chan, kernel_size=kernel_size, padding=1))
             if self.use_bn:
                 layers.append(nn.BatchNorm2d(out_chan))
@@ -171,16 +173,18 @@ class CNN(Classifer):
             output_H = (input_H + 2*1 - kernel_size) // stride + 1
             input_H = output_H
 
+            blocks.append(nn.Sequential(*layers))
+
         if model_tune==True:
-            layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+            blocks.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
             # find output dimension after maxpool layer
             output_H = (output_H + 2*1 - 3) // 2 + 1
         # squeeze the spatial dimensions
-        layers.append(nn.Flatten())
+        blocks.append(nn.Flatten())
         output_dim = output_H * output_H * out_chan
-        layers.append(nn.Linear(output_dim, num_classes))
+        blocks.append(nn.Linear(output_dim, num_classes))
 
-        self.network = nn.Sequential(*layers)
+        self.network = nn.Sequential(*blocks)
 
     def forward(self, x):
         return self.network(x)
@@ -207,7 +211,7 @@ class ResNet18(Classifer):
         return x
 
 class CNN3D(Classifer):
-    def __init__(self, input_dim=256*256*200, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, **kwargs):
+    def __init__(self, input_dim=256*256*200*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -280,12 +284,14 @@ class BasicBlock3D(nn.Module):
         out = self.relu(out)
 
         return out
+    
+class ResNet183D(Classifer):
 
-class ResNet183D(nn.Module):
-
-    def __init__(self, block, layers, num_classes=2):
-        self.inplanes = 64
-        super(ResNet183D, self).__init__()
+    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, init_lr=1e-4, **kwargs):
+        super().__init__(num_classes=num_classes, init_lr=init_lr)
+        self.save_hyperparameters()
+        self.inplanes = 200
+        self.pretrained = pretrained
         
         self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2,2,2), padding=3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
@@ -300,6 +306,36 @@ class ResNet183D(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+        if self.pretrained:
+            pretrained_model = resnet18(pretrained=True)
+            # self.conv1.weight.data = self.repeat_weights(pretrained_model.conv1.weight.data, 200)
+            self._initialize_3d_from_2d(pretrained_model)
+    
+    def repeat_weights(self, w2d, num_repeats):
+        c_out, c_in, h, w = w2d.size()
+        w3d = w2d.repeat(1, 1, num_repeats, 1, 1) / num_repeats
+        return w3d
+    
+    def _initialize_3d_from_2d(self, pretrained_model):
+        pretrained_layers = [
+            pretrained_model.layer1, 
+            pretrained_model.layer2, 
+            pretrained_model.layer3, 
+            pretrained_model.layer4
+        ]
+        model_layers = [self.layer1, self.layer2, self.layer3, self.layer4]
+        
+        for pre_layer, model_layer in zip(pretrained_layers, model_layers):
+            for pre_block, model_block in zip(pre_layer, model_layer):
+                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 200)
+                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 200)
+                
+                model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
+                model_block.bn1.bias.data = pre_block.bn1.bias.data.clone()
+                model_block.bn2.weight.data = pre_block.bn2.weight.data.clone()
+                model_block.bn2.bias.data = pre_block.bn2.bias.data.clone()
+    
+
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
@@ -311,7 +347,7 @@ class ResNet183D(nn.Module):
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
+        for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes))
 
         return nn.Sequential(*layers)
@@ -350,7 +386,7 @@ class R3D(Classifer):
     def forward(self, x):
         x = self.resnet3d(x)
         return x
-    
+ 
 class SwinTransformer(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
