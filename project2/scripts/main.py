@@ -13,10 +13,7 @@ NAME_TO_MODEL_CLASS = {
     "mlp": MLP,
     "risk_model": RiskModel,
     "resnet18": ResNet18,
-<<<<<<< HEAD
     "cnn": CNN
-=======
->>>>>>> liching
 }
 
 NAME_TO_DATASET_CLASS = {

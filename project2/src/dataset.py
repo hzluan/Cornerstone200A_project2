@@ -36,14 +36,12 @@ class PathMnist(pl.LightningDataModule):
         ])
         #########################################
         if self.use_data_augmentation:
-            transforms_dict = [
-            tio.RandomAffine(),
-            tio.RandomElasticDeformation(),
-            tio.RandomFlip(),
-            tio.RandomAffine(scales=(0.9, 1.2),degrees=15,),
-            tio.RandomNoise()
-        ]
-            self.train_transform = tio.OneOf(transforms_dict)
+            self.train_transform = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.RandomVerticalFlip(p=0.5),
+                torchvision.transforms.RandomRotation(degrees=15),
+                torchvision.transforms.RandomAffine(degrees=15)
+            ])
         else:
             self.train_transform = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor()
