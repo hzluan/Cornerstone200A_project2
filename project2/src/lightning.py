@@ -175,7 +175,9 @@ class CNN(Classifer):
             blocks.append(nn.Sequential(*layers))
 
         if model_tune==True:
-            blocks.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+            layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+            # find output dimension after maxpool layer
+            output_H = (output_H + 2*1 - 3) // 2 + 1
         # squeeze the spatial dimensions
         blocks.append(nn.Flatten())
         output_dim = output_H * output_H * out_chan
