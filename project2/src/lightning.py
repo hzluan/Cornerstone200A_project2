@@ -8,7 +8,6 @@ from torchvision.models import resnet18
 from torchvision.models.video import r3d_18
 from torchvision.models.swin_transformer import swin_v2_b
 from src.cindex import concordance_index
-from pytorchvideo.models.slowfast import create_slow_r50
 
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4):
