@@ -147,7 +147,7 @@ class MLP(Classifer):
         return self.network(x)
 
 class CNN(Classifer):
-    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride = 1, num_classes=9, use_bn=False, **kwargs):
+    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride = 1, num_classes=9, use_bn=False, model_tune=False, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -170,12 +170,11 @@ class CNN(Classifer):
             input_chan = out_chan
             output_H = (input_H + 2*1 - kernel_size) // stride + 1
             input_H = output_H
-
+        if model_tune==True:
+            layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
         # squeeze the spatial dimensions
         layers.append(nn.Flatten())
-        # find dimensions of output
         output_dim = output_H * output_H * out_chan
-        # append a linear layer with output size of num_classes
         layers.append(nn.Linear(output_dim, num_classes))
 
         self.network = nn.Sequential(*layers)
@@ -184,7 +183,7 @@ class CNN(Classifer):
         return self.network(x)
 
 class ResNet18(Classifer):
-    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
+    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False,model_tune=False,**kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
@@ -193,7 +192,10 @@ class ResNet18(Classifer):
             self.resnet = resnet18(weights='DEFAULT')
         else:
             self.resnet = resnet18()
-
+        ####################
+        # experimenting with resnet18
+        if model_tune==True:
+            self.resnet.maxpool = nn.avgpool2d(kernel_size=3, stride=2, padding=1)
         num_ftrs = self.resnet.fc.in_features
         self.resnet.fc = nn.Linear(num_ftrs, num_classes)
     def forward(self, x):
