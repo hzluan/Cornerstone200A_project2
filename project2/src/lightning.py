@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import torchmetrics
 import torchvision
 from torchvision.models import resnet18
+from torchvision.models.video import r3d_18
+from torchvision.models.swin_transformer import swin_v2_b
 from src.cindex import concordance_index
 
 class Classifer(pl.LightningModule):
@@ -116,8 +118,6 @@ class Classifer(pl.LightningModule):
         self.opt = torch.optim.Adam(self.parameters(), lr=self.init_lr)
         return self.opt
 
-
-
 class MLP(Classifer):
     def __init__(self, input_dim=28*28*3, hidden_dim=128, num_layers=1, num_classes=9, use_bn=False, init_lr = 1e-3, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
@@ -145,7 +145,6 @@ class MLP(Classifer):
         batch_size, channels, width, height = x.size()
         x = x.view(batch_size, -1)
         return self.network(x)
-
 
 class CNN(Classifer):
     def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride = 1, num_classes=9, use_bn=False, **kwargs):
@@ -189,20 +188,180 @@ class ResNet18(Classifer):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
-        #######################################
         self.pretrained = pretrained
         if self.pretrained:
-            self.resnet = torchvision.models.resnet18(weights='DEFAULT')
+            self.resnet = resnet18(weights='DEFAULT')
         else:
-            self.resnet = torchvision.models.resnet18()
+            self.resnet = resnet18()
 
         num_ftrs = self.resnet.fc.in_features
         self.resnet.fc = nn.Linear(num_ftrs, num_classes)
     def forward(self, x):
-        #######################################
         x = self.resnet(x)
         return x
 
+class CNN3D(Classifer):
+    def __init__(self, input_dim=256*256*200, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, **kwargs):
+        super().__init__(num_classes=num_classes)
+        self.save_hyperparameters()
+
+        self.out_chan = out_chan
+        self.use_bn = use_bn
+        self.kernel_size = kernel_size
+        self.stride = stride
+
+        layers = []
+        input_H = 256
+        output_H = 256
+        input_D = 200
+        output_D = 200
+
+        for _ in range(num_layers):
+            layers.append(nn.Conv3d(input_chan, out_chan, kernel_size=kernel_size, padding=1))
+            if self.use_bn:
+                layers.append(nn.BatchNorm3d(out_chan))
+            layers.append(nn.ReLU())
+            input_chan = out_chan
+            output_H = (input_H + 2*1 - kernel_size) // stride + 1
+            output_D = (input_D + 2*1 - kernel_size) // stride + 1
+            input_H = output_H
+            input_D = output_D
+
+        # squeeze the spatial dimensions
+        layers.append(nn.Flatten())
+        # find dimensions of output
+        output_dim = output_H * output_H * output_D * out_chan
+        # append a linear layer with output size of num_classes
+        layers.append(nn.Linear(output_dim, num_classes))
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.network(x)
+
+#############################
+# for 3d resnet18
+def conv3x3x3(in_planes, out_planes, stride=1):
+    # 3x3x3 convolution with padding
+    return nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+
+class BasicBlock3D(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+        super(BasicBlock3D, self).__init__()
+        self.conv1 = conv3x3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm3d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3x3(planes, planes)
+        self.bn2 = nn.BatchNorm3d(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+class ResNet183D(nn.Module):
+
+    def __init__(self, block, layers, num_classes=2):
+        self.inplanes = 64
+        super(ResNet183D, self).__init__()
+        
+        self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2,2,2), padding=3, bias=False)
+        self.bn1 = nn.BatchNorm3d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
+        
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=(2,2,2))
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=(2,2,2))
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=(2,2,2))
+        
+        self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm3d(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+
+class R3D(Classifer):
+    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
+        super().__init__(num_classes=num_classes, init_lr=init_lr)
+        self.save_hyperparameters()
+
+        self.pretrained = pretrained
+        if self.pretrained:
+            self.resnet3d = r3d_18(weights='DEFAULT')
+        else:
+            self.resnet3d = r3d_18()
+
+        num_ftrs = self.resnet3d.fc.in_features
+        self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
+
+    def forward(self, x):
+        x = self.resnet3d(x)
+        return x
+    
+class SwinTransformer(Classifer):
+    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
+        super().__init__(num_classes=num_classes, init_lr=init_lr)
+        self.save_hyperparameters()
+
+        self.pretrained = pretrained
+        if self.pretrained:
+            self.swin = swin_v2_b(weights='DEFAULT')
+        else:
+            self.swin = swin_v2_b()
+
+        num_ftrs = self.swin.head.in_features
+        self.swin.fc = nn.Linear(num_ftrs, num_classes)
+    def forward(self, x):
+        x = self.swin(x)
+        return x
 
 NLST_CENSORING_DIST = {
     "0": 0.9851928130104401,
@@ -310,3 +469,4 @@ class RiskModel(Classifer):
     def on_test_epoch_end(self):
         self.on_epoch_end("test", self.test_outputs)
         self.test_outputs = []
+
