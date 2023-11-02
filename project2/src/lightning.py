@@ -148,7 +148,7 @@ class MLP(Classifer):
 
 
 class CNN(Classifer):
-    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride = 1, num_classes=9, use_bn=False, **kwargs):
+    def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride=1, num_classes=9, use_bn=False, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -157,13 +157,14 @@ class CNN(Classifer):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        layers = []
+        blocks = []
         input_H = 28
         output_H = 28
 
         # TODO: Implement CNN
         # use different number of layers, kernel size, strides
         for _ in range(num_layers):
+            layers = []
             layers.append(nn.Conv2d(input_chan, out_chan, kernel_size=kernel_size, padding=1))
             if self.use_bn:
                 layers.append(nn.BatchNorm2d(out_chan))
@@ -172,14 +173,16 @@ class CNN(Classifer):
             output_H = (input_H + 2*1 - kernel_size) // stride + 1
             input_H = output_H
 
+            blocks.append(nn.Sequential(*layers))
+
         # squeeze the spatial dimensions
-        layers.append(nn.Flatten())
+        blocks.append(nn.Flatten())
         # find dimensions of output
         output_dim = output_H * output_H * out_chan
         # append a linear layer with output size of num_classes
-        layers.append(nn.Linear(output_dim, num_classes))
+        blocks.append(nn.Linear(output_dim, num_classes))
 
-        self.network = nn.Sequential(*layers)
+        self.network = nn.Sequential(*blocks)
 
     def forward(self, x):
         return self.network(x)

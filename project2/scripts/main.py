@@ -44,7 +44,7 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
 
     parser.add_argument(
         "--monitor_key",
-        default="val_loss",
+        default="val_acc",
         help="Name of metric to use for checkpointing. (e.g. val_loss, val_acc)"
     )
 
@@ -56,7 +56,7 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
 
     parser.add_argument(
         "--train",
-        default=False,
+        default=True,
         action="store_true",
         help="Whether to train the model."
     )
