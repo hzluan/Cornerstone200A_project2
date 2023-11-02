@@ -156,14 +156,13 @@ class CNN(Classifer):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        blocks = []
+        layers = []
         input_H = 28
         output_H = 28
 
         # TODO: Implement CNN
         # use different number of layers, kernel size, strides
         for _ in range(num_layers):
-            layers = []
             layers.append(nn.Conv2d(input_chan, out_chan, kernel_size=kernel_size, padding=1))
             if self.use_bn:
                 layers.append(nn.BatchNorm2d(out_chan))
@@ -172,18 +171,16 @@ class CNN(Classifer):
             output_H = (input_H + 2*1 - kernel_size) // stride + 1
             input_H = output_H
 
-            blocks.append(nn.Sequential(*layers))
-
         if model_tune==True:
             layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
             # find output dimension after maxpool layer
             output_H = (output_H + 2*1 - 3) // 2 + 1
         # squeeze the spatial dimensions
-        blocks.append(nn.Flatten())
+        layers.append(nn.Flatten())
         output_dim = output_H * output_H * out_chan
-        blocks.append(nn.Linear(output_dim, num_classes))
+        layers.append(nn.Linear(output_dim, num_classes))
 
-        self.network = nn.Sequential(*blocks)
+        self.network = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.network(x)
