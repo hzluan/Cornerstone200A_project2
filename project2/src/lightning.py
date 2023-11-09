@@ -7,18 +7,21 @@ import torchvision
 from torchvision.models import resnet18
 from torchvision.models.video import r3d_18
 from torchvision.models.swin_transformer import swin_v2_b
+import numpy as np
 from src.cindex import concordance_index
 
 class Classifer(pl.LightningModule):
-    def __init__(self, num_classes=9, init_lr=1e-4):
+    def __init__(self, num_classes=9, init_lr=1e-4, use_attention=False, attention_mask=None):
         super().__init__()
         self.init_lr = init_lr
         self.num_classes = num_classes
 
         # Define loss fn for classifier
         ######################################
+        self.use_attention = use_attention
+        self.attention_mask = attention_mask
         self.loss = nn.CrossEntropyLoss()
-
+        
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.auc = torchmetrics.AUROC(task="binary" if self.num_classes == 2 else "multiclass", num_classes=self.num_classes)
 
@@ -26,6 +29,9 @@ class Classifer(pl.LightningModule):
         self.validation_outputs = []
         self.test_outputs = []
 
+    def AttentionLoss(alpha, A):
+        return -np.log(torch.mm(alpha, A)).sum()
+    
     def get_xy(self, batch):
         if isinstance(batch, list):
             x, y = batch[0], batch[1]
@@ -39,8 +45,12 @@ class Classifer(pl.LightningModule):
 
         ## TODO: get predictions from your model and store them as y_hat
         ###################################################
-        y_hat = self.forward(x)
-        loss = self.loss(y_hat, y)
+        y_hat, alpha = self.forward(x)
+        if self.use_attention:
+            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            loss = attention_loss + self.loss(y_hat, y)
+        else:
+            loss = self.loss(y_hat, y)
 
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         self.log('train_loss', loss, prog_bar=True)
@@ -144,7 +154,7 @@ class MLP(Classifer):
         #######################################
         batch_size, channels, width, height = x.size()
         x = x.view(batch_size, -1)
-        return self.network(x)
+        return self.network(x), None
 
 class CNN(Classifer):
     def __init__(self, input_dim=28*28*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=3, stride=1, num_classes=9, use_bn=False, model_tune=False, **kwargs):
@@ -186,7 +196,7 @@ class CNN(Classifer):
         self.network = nn.Sequential(*blocks)
 
     def forward(self, x):
-        return self.network(x)
+        return self.network(x), None
 
 class ResNet18(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False,model_tune=False,**kwargs):
@@ -207,10 +217,10 @@ class ResNet18(Classifer):
         self.resnet.fc = nn.Linear(num_ftrs, num_classes)
     def forward(self, x):
         x = self.resnet(x)
-        return x
+        return x, None
 
 class CNN3D(Classifer):
-    def __init__(self, input_dim=256*256*200*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, **kwargs):
+    def __init__(self, input_dim=256*256*200*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, use_attention=False, attention_mask=None, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -218,6 +228,8 @@ class CNN3D(Classifer):
         self.use_bn = use_bn
         self.kernel_size = kernel_size
         self.stride = stride
+
+        self.attention_mask = attention_mask
 
         layers = []
         input_H = 256
@@ -240,12 +252,26 @@ class CNN3D(Classifer):
         layers.append(nn.Flatten())
         # find dimensions of output
         output_dim = output_H * output_H * out_chan
-        layers.append(nn.Linear(output_dim, num_classes))
 
         self.network = nn.Sequential(*layers)
-
+        self.use_attention = use_attention
+        if self.use_attention:
+            self.attention = nn.Conv3d(in_channels=output_dim, out_channels=1,
+                                    kernel_size=1, stride=1)
+        
+        self.fc = nn.Linear(output_dim, num_classes)
+    
     def forward(self, x):
-        return self.network(x)
+        B, C, D, H, W = x.size()
+        h = self.network(x)
+        alpha = None
+        if self.use_attention:
+            alpha = self.attention(x)
+            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
+            h = torch.mm(alpha, h)
+
+        h_logit = self.fc(h)
+        return h_logit, alpha
 
 #############################
 # for 3d resnet18
