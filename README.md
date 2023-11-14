@@ -62,20 +62,22 @@ ResNet-3D models (with and without video pretrainig)
 (Optional) Swin-T models (with Video pretraining)
 In addition to these experiments, please also include an exploration of why pretraining helps model performance. To what extent is the performance boost driven by feature transfer as opposed a form of optimization preconditioning? Please design experiments to address this question and include your results in your project report.
 
-By the end of this part of the project, your validation 1-Year AUC should be at least 0.80.
+#### Note: this means re-initialize randomly using mean and standard deviation from pretrained weights. (**extra credit**)
+
+By the end of this part of the project, your validation 1-Year AUC should be at least 0.80.(**pooling strategy is important?**)
 
 2.2: Building a better model with localization (25 pts)
 In addition to cancer labels, our dataset also contains region annotations for each cancer CT scan. In this exercise, you will leverage this information to improve your cancer detection model. The bounding box data and the equivalent segementation masks are loaded for you in src/dataset.py.
 #### note: 
 Attention: cross attention between cancer images or cancer/non0cancer images
 self-attention between patches
-For the segmentation mask: we can have a separate pipeline that segments the nodules and classify whether the nodule will be maglinant within on e year, concat this score with model prediction.
+For the segmentation mask: we can have a separate pipeline that segments the nodules and classify whether the nodule will be maglinant within one year, concat this score with model prediction.
 In your project report, please:
 
 Introduce your method to incorporate localization information into your model
 Note, there are many valid options here!
 Add metrics to quantify the quality of your localizations (e.g. IoU, or a likelihood metric)
-Add vizualizations of your generated localizations against the ground truth
+Add vizualizations of your generated localizations against the ground truth（**extra credit** plotting heatmap of attention and the provided annotation）
 By the end of this part of the project, your validation 1-Year AUC should be at least 0.87.
 
 #### Notes
@@ -85,13 +87,13 @@ an IoU of 1 means that the union of the boxes is the same as their overlap indic
 ![image](https://github.com/hzluan/Cornerstone-Project-2/assets/66193810/10882652-d19c-4baa-836c-df88db0305ed)
 
 2.3: Compare to LungRads criteria and simulate possible improvements to clinical workflow (10 pts)
-Now that you've developed a lung cancer detection model, it's time to analyze its clinical implications. In this exercise, you will compare your model to the LungRads criteria (which are loaded in dataset.py) and simulate the impact of your model on the clinical workflow. In your report, please introduce a workflow of how your model could be used to ameleorate screening and provide quantitative estimates of your workflow's impact. Be sure to study the impact of your model across various subgroups, as you did in Project 1. Finally, please include a discussion of the limitations of your analyses and subsequent studies are needed to drive these tools to impact.
+Now that you've developed a lung cancer detection model, it's time to analyze its clinical implications. In this exercise, you will compare your model to the LungRads criteria (which are loaded in dataset.py) and simulate the impact of your model on the clinical workflow. In your report, please introduce a workflow of how your model could be used to ameliorate (improve) screening and provide quantitative estimates of your workflow's impact(**bayesian??**). Be sure to study the impact of your model across various subgroups, as you did in Project 1. Finally, please include a discussion of the limitations of your analyses and subsequent studies are needed to drive these tools to impact.
 
 ### Part 3: Extending your LDCT model to predict cancer risk
 In this part of the project, you will extend your cancer detection model to predict cancer risk and compare your results to your best model from project 1.
 
 Comparing to your best model from Project 1 (note not 100% overlapping questionares) (10pts)
-Questionares from NLST are available in src/dataset.py. In your project report, please validate your PLCO model (from project 1) on the NLST dataset. Note, some of the information available in PLCO is not available in NLST, so you may need to simplify your project 1 model. Is there a meanigful performance difference between your PLCO model across the PLCO and NLST datasets? If so, why?
+Questionnaires from NLST are available in src/dataset.py. In your project report, please validate your PLCO model (from project 1) on the NLST dataset. Note, some of the information available in PLCO is not available in NLST, so you may need to simplify your project 1 model. Is there a meaningful performance difference between your PLCO model across the PLCO and NLST datasets? If so, why?
 
 Extend risk model to predict cancer risk (20pts)
 In this exercise, you will extend your cancer detection model to predict cancer risk. Specifically, you will predict the probability of a patient being diagnosed with cancer within [1,2,3,4,5,6] years of their CT scan. Note, there are many multiple ways to achieve this goal.
@@ -101,10 +103,10 @@ In your project report, please include the following:
 Your approach to extending your classifier to predict risk over time
 Detailed performance evaluation of your risk model across multiple time horizons (e.g. 1,3 and 6 years)
 Comparison of your imaging-based risk model against your PLCO model
-An approach for combining your imaging-based risk model with the clinical information in your PLCO model
+An approach for combining your imaging-based risk model with the clinical information in your PLCO model (**extra credit**)
 Note, there are many valid options here!
 Performance evaluation of this combined model across multiple time horizons.
 Your image-based 6-year validation AUC should be at least 0.76 and your 1-year Validation should at least as good as your best detection model.
 
 Explore clinical implications of this model (10pts)
-Now that you've developed your risk model, it's time to analyze the clinical opportunities in enables. Please propose a workflow for how your model could be used to improve screening and quantify the potential impact of your workflow. Be sure to study the impact of your model across various subgroups, as you did in Project 1. Finally, please include a discussion of the limitations of your analyses and subsequent studies are needed to drive these tools to impact.
+Now that you've developed your risk model, it's time to analyze the clinical opportunities it enables. Please propose a workflow for how your model could be used to improve screening and quantify the potential impact of your workflow. Be sure to study the impact of your model across various subgroups, as you did in Project 1. Finally, please include a discussion of the limitations of your analyses and subsequent studies are needed to drive these tools to impact. (**add treatment as part of the input and compare treatment effect and survival rate, attention on image for where to pay attention to**) (**subgroup number required, writing optional**)
