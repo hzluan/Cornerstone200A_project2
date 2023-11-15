@@ -312,11 +312,12 @@ class BasicBlock3D(nn.Module):
     
 class ResNet183D(Classifer):
 
-    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, init_lr=1e-4, **kwargs):
+    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, init_lr=1e-4, random_init=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.inplanes = 200
         self.pretrained = pretrained
+        self.random_init = random_init
         
         self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2,2,2), padding=3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
@@ -332,10 +333,22 @@ class ResNet183D(Classifer):
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         if self.pretrained:
-            pretrained_model = resnet18(pretrained=True)
+            pretrained_model = resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
             # self.conv1.weight.data = self.repeat_weights(pretrained_model.conv1.weight.data, 200)
+            if self.random_init:
+                for name, module in pretrained_model.named_modules():
+                    if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                        reference_weights = pretrained_model.state_dict()[name + '.weight']
+                        module.apply(lambda m: self.init_weights(m, reference_weights))
             self._initialize_3d_from_2d(pretrained_model)
-    
+
+    def init_weights(self, m, reference_weights):
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+            with torch.no_grad():
+                m.weight = nn.Parameter(torch.randn_like(m.weight) * reference_weights.std() + reference_weights.mean())
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+
     def repeat_weights(self, w2d, num_repeats):
         c_out, c_in, h, w = w2d.size()
         w3d = w2d.repeat(1, 1, num_repeats, 1, 1) / num_repeats

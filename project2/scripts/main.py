@@ -4,7 +4,7 @@ import sys
 from os.path import dirname, realpath
 
 sys.path.append(dirname(dirname(realpath(__file__))))
-from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer
+from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer,ResNet183D
 from src.dataset import PathMnist, NLST
 from lightning.pytorch.cli import LightningArgumentParser
 import lightning.pytorch as pl
@@ -16,6 +16,7 @@ NAME_TO_MODEL_CLASS = {
     "cnn": CNN,
     "cnn3d": CNN3D,
     "r3d": R3D,
+    "resnet183D": ResNet183D,
     "swin_transformer": SwinTransformer
 }
 
