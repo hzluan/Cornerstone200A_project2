@@ -2,6 +2,8 @@
 This is the repositopry for the CPH 200 Cornerstone Project 2 by Hongzhou Luan and Li-Ching Chen
 Due Date: 5PM PST Nov 16, 2023
 
+module load CBI miniconda3/23.3.1-0-py39
+
 ## Dataset
 PathMNIST
 The PathMNIST is based on a prior study16,17 for predicting survival from colorectal cancer histology slides, providing a dataset (NCT-CRC-HE-100K) of 100,000 non-overlapping image patches from hematoxylin & eosin stained histological images, and a test dataset (CRC-VAL-HE-7K) of 7,180 image patches from a different clinical center. The dataset is comprised of 9 types of tissues, resulting in a multi-class classification task. We resize the source images of 3 × 224 × 224 into 3 × 28 × 28, and split NCT-CRC-HE-100K into training and validation set with a ratio of 9:1. The CRC-VAL-HE-7K is treated as the test set.
