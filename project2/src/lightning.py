@@ -50,10 +50,12 @@ class Classifer(pl.LightningModule):
             attention_loss = self.AttentionLoss(alpha, self.attention_mask)
             loss = attention_loss + self.loss(y_hat, y)
         else:
+            attention_loss = 0
             loss = self.loss(y_hat, y)
 
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         self.log('train_loss', loss, prog_bar=True)
+        self.log('train_attention_loss', attention_loss, prog_bar=True)
 
         ## Store the predictions and labels for use at the end of the epoch
         self.training_outputs.append({
@@ -65,10 +67,19 @@ class Classifer(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
         #################################################
-        y_hat = self.forward(x)
-        loss = self.loss(y_hat, y)
+        y_hat, alpha = self.forward(x)
+
+        if self.use_attention:
+            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            loss = attention_loss + self.loss(y_hat, y)
+        else:
+            attention_loss = 0
+            loss = self.loss(y_hat, y)
+
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
+        self.log('val_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
+
 
         self.validation_outputs.append({
             "y_hat": y_hat,
@@ -79,12 +90,18 @@ class Classifer(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = self.get_xy(batch)
         ###############################
-        y_hat = self.forward(x)
-        loss = self.loss(y_hat, y)
+        y_hat, alpha = self.forward(x)
+        if self.use_attention:
+            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            loss = attention_loss + self.loss(y_hat, y)
+        else:
+            attention_loss = 0
+            loss = self.loss(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
+        self.log('test_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
-
+        
         self.test_outputs.append({
             "y_hat": y_hat,
             "y": y
