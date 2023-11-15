@@ -243,8 +243,8 @@ class CNN3D(Classifer):
                 layers.append(nn.BatchNorm3d(out_chan))
             layers.append(nn.ReLU())
             input_chan = out_chan
-            output_H = (input_H + 2*1 - kernel_size) // stride + 1
-            output_D = (input_D + 2*1 - kernel_size) // stride + 1
+            output_H = (input_H + 2*1 - kernel_size[0]) // stride + 1
+            output_D = (input_D + 2*1 - kernel_size[0]) // stride + 1
             input_H = output_H
             input_D = output_D
 
