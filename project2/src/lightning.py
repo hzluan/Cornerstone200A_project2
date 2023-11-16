@@ -237,7 +237,7 @@ class ResNet18(Classifer):
         return x, None
 
 class CNN3D(Classifer):
-    def __init__(self, input_dim=256*256*200*3, input_chan=3, out_chan=128, num_layers=6, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, use_attention=False, attention_mask=None, **kwargs):
+    def __init__(self, input_dim=256*256*200*3, input_chan=1, out_chan=32, num_layers=3, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, use_attention=False, attention_mask=None, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -268,9 +268,10 @@ class CNN3D(Classifer):
         # squeeze the spatial dimensions
         layers.append(nn.Flatten())
         # find dimensions of output
-        output_dim = output_H * output_H * out_chan
+        output_dim = output_H * output_H * out_chan * output_D
 
         self.network = nn.Sequential(*layers)
+
         self.use_attention = use_attention
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=output_dim, out_channels=1,
@@ -286,7 +287,6 @@ class CNN3D(Classifer):
             alpha = self.attention(x)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
             h = torch.mm(alpha, h)
-
         h_logit = self.fc(h)
         return h_logit, alpha
 
