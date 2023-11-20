@@ -294,7 +294,7 @@ class CNN3D(Classifer):
 # for 3d resnet18
 def conv3x3x3(in_planes, out_planes, stride=1):
     # 3x3x3 convolution with padding
-    return nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+    return nn.Conv3d(in_planes, out_planes, kernel_size=(3,3,3), stride=stride, padding=1, bias=False)
 
 class BasicBlock3D(nn.Module):
     expansion = 1
@@ -311,8 +311,11 @@ class BasicBlock3D(nn.Module):
 
     def forward(self, x):
         residual = x
+        print("############################3")
+        print(f"Input shape to conv1: {x.shape}")
 
         out = self.conv1(x)
+        print(f"Output shape from conv1: {out.shape}")
         out = self.bn1(out)
         out = self.relu(out)
 
@@ -336,10 +339,10 @@ class ResNet183D(Classifer):
         self.pretrained = pretrained
         self.random_init = random_init
         
-        self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2,2,2), padding=3, bias=False)
+        self.conv1 = nn.Conv3d(1, 64, kernel_size=(7,7,7), stride=(2,2,2), padding=3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
+        self.maxpool = nn.MaxPool3d(kernel_size=(3,3,3), stride=2, padding=1)
         
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=(2,2,2))
@@ -383,7 +386,7 @@ class ResNet183D(Classifer):
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
                 model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 200)
-                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 200)
+                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 64)
                 
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
                 model_block.bn1.bias.data = pre_block.bn1.bias.data.clone()
@@ -395,7 +398,7 @@ class ResNet183D(Classifer):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=(1,1,1), stride=stride, bias=False),
                 nn.BatchNorm3d(planes * block.expansion),
             )
 
@@ -434,13 +437,27 @@ class R3D(Classifer):
             self.resnet3d = r3d_18(weights='DEFAULT')
         else:
             self.resnet3d = r3d_18()
+        
+        original_first_layer = self.resnet3d.stem[0]
+
+        new_first_layer = torch.nn.Conv3d(1, 
+                                        original_first_layer.out_channels, 
+                                        kernel_size=original_first_layer.kernel_size, 
+                                        stride=original_first_layer.stride, 
+                                        padding=original_first_layer.padding, 
+                                        bias=False)
+
+        with torch.no_grad():
+            new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
+
+        setattr(self.resnet3d.stem, '0', new_first_layer)
 
         num_ftrs = self.resnet3d.fc.in_features
         self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
 
     def forward(self, x):
         x = self.resnet3d(x)
-        return x
+        return x, None
  
 class SwinTransformer(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
