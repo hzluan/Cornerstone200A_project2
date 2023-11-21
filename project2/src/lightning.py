@@ -54,7 +54,6 @@ class Classifer(pl.LightningModule):
         ## TODO: get predictions from your model and store them as y_hat
         ###################################################
         y_hat, alpha = self.forward(x)
-        y_hat = y_hat[:, 1]
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
@@ -79,7 +78,6 @@ class Classifer(pl.LightningModule):
         x, y, annotation_mask = self.get_xy(batch)
         #################################################
         y_hat, alpha = self.forward(x)
-        y_hat = y_hat[:, 1]
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
@@ -103,7 +101,6 @@ class Classifer(pl.LightningModule):
         x, y, annotation_mask = self.get_xy(batch)
         ###############################
         y_hat, alpha = self.forward(x)
-        y_hat = y_hat[:, 1]
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
