@@ -31,14 +31,13 @@ class Classifer(pl.LightningModule):
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
-        # torch.Size([6, 1, 256, 256, 200])
         if len(torch.unique(A.nonzero()[:, 0])) == 0:
             return 0
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
         a = a / len(torch.unique(A.nonzero()[:, 0]))
-        return -np.log(a.cpu().numpy()).sum()
+        return -np.log(a.detach().cpu().numpy()).sum()
     
     def get_xy(self, batch):
         if isinstance(batch, list):
@@ -364,9 +363,10 @@ class ResNet183D(Classifer):
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=1, out_channels=1,
                                     kernel_size=1, stride=1)
-            self.fc_attn = nn.Linear(200, 128)
-            self.fc_max = nn.Linear(512, 128)
-            self.fc = nn.Linear(128, num_classes)
+            self.attn_maxpool = nn.MaxPool3d((7, 7, 7))
+            self.fc_attn = nn.Linear(36288, 128)
+            self.fc_max = nn.Linear(512, 28)
+            self.fc = nn.Linear(352, num_classes)
         else:
             self.fc = nn.Linear(4096, num_classes)
 
@@ -441,17 +441,20 @@ class ResNet183D(Classifer):
         x = self.layer3(x)
         x = self.layer4(x)
         # 6, 512, 8, 8, 7
-        max_pooling = self.maxpool2(x)
-        max_pooling = max_pooling.view(B, -1, max_pooling.size()[1])
+        max_pooling = self.maxpool2(x) # B, 512, 2, 2, 2
+        max_pooling = max_pooling.view(B, -1, max_pooling.size()[1]) # 6, 8, 512
         alpha = None
         if self.use_attention:
             alpha = self.attention(residual)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
             attn_pooling = alpha*residual
             # add maxpooling layer and concatenate
-            attn_pooling = self.fc_attn(attn_pooling) # B, 1, D, H, 128
-            max_pooling = self.fc_max(max_pooling) # B, X, 128
-            x = torch.concat([attn_pooling.view(B, -1, attn_pooling.size()[-1]), max_pooling], dim=1).view(B,-1)
+            attn_pooling = self.attn_maxpool(attn_pooling) # B, 1, 36, 36, 28
+            attn_pooling = self.fc_attn(attn_pooling.view(B, -1)) # B, 
+            # print(max_pooling.size(), attn_pooling.size())
+            max_pooling = self.fc_max(max_pooling) # B, 8, 28
+            # print(max_pooling.size(), attn_pooling.size())
+            x = torch.concat([attn_pooling, max_pooling.view(B,-1)], dim=1)
             x = self.fc(x)
             return x, alpha
         else:

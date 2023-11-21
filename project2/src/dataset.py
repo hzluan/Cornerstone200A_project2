@@ -287,7 +287,8 @@ class NLST_Dataset(torch.utils.data.Dataset):
         })
 
         '''
-            TorchIO will consistently apply the data augmentations to the image and mask, so that they are aligned. Note, the 'bounding_boxes' item will be wrong after after random transforms (e.g. rotations) in this implementation. 
+            TorchIO will consistently apply the data augmentations to the image and mask, so that they are aligned. 
+            Note, the 'bounding_boxes' item will be wrong after random transforms (e.g. rotations) in this implementation. 
         '''
         try:
             subject = self.transform(subject)
