@@ -35,7 +35,7 @@ class Classifer(pl.LightningModule):
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
-        a = a / 
+        a = a / np.unique(A.nonzero()[0])
         return -np.log(a).sum()
     
     def get_xy(self, batch):
@@ -293,7 +293,7 @@ class CNN3D(Classifer):
         if self.use_attention:
             alpha = self.attention(x)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            h = torch.mm(alpha, h)
+            h = alpha*h
             # add maxpooling layer and concatenate
         h_logit = self.fc(h)
         return h_logit, alpha
@@ -337,7 +337,7 @@ class BasicBlock3D(nn.Module):
     
 class ResNet183D(Classifer):
 
-    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, init_lr=1e-4, random_init=False, **kwargs):
+    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, use_attention=False, init_lr=1e-4, random_init=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.inplanes = 64
@@ -354,8 +354,15 @@ class ResNet183D(Classifer):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=(2,2,2))
         self.layer4 = self._make_layer(block, 512, layers[3], stride=(2,2,2))
         
-        self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.maxpool2 = nn.MaxPool3d((1, 1, 1))
+
+        self.use_attention = use_attention
+        if self.use_attention:
+            self.attention = nn.Conv3d(in_channels=512 * block.expansion, out_channels=1,
+                                    kernel_size=1, stride=1)
+            self.fc = nn.Linear(512 * 2 * block.expansion, num_classes)
+        else:
+            self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         if self.pretrained:
             pretrained_model = resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
@@ -416,6 +423,8 @@ class ResNet183D(Classifer):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        B, C, D, H, W = x.size()
+        residual = x
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -426,11 +435,19 @@ class ResNet183D(Classifer):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = self.avgpool(x)
+        max_pooling = self.maxpool2(x)
+        alpha = None
+        if self.use_attention:
+            alpha = self.attention(residual)
+            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
+            attn_pooling = alpha*x
+            # add maxpooling layer and concatenate
+            x = torch.stack([max_pooling, attn_pooling])
+
         x = x.view(x.size(0), -1)
         x = self.fc(x)
 
-        return x,  None
+        return x,  alpha
 
 class R3D(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
