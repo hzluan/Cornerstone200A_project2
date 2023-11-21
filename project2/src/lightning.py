@@ -81,6 +81,8 @@ class Classifer(pl.LightningModule):
             loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
+            print('#######################################')
+            print(y_hat.size(), y.size())
             loss = self.loss(y_hat, y)
 
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
@@ -100,10 +102,12 @@ class Classifer(pl.LightningModule):
         y_hat, alpha = self.forward(x)
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, self.attention_mask)
-            loss = attention_loss + self.loss(y_hat, y)
+            loss = attention_loss + self.loss(y_hat[:, 1], y)
         else:
             attention_loss = 0
-            loss = self.loss(y_hat, y)
+            print('#######################################')
+            print(y_hat.size(), y.size())
+            loss = self.loss(y_hat[:, 1], y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
@@ -337,7 +341,7 @@ class BasicBlock3D(nn.Module):
     
 class ResNet183D(Classifer):
 
-    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, use_attention=False, init_lr=1e-4, random_init=False, **kwargs):
+    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=2, pretrained=False, use_attention=False, init_lr=1e-4, random_init=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.inplanes = 64
@@ -354,7 +358,7 @@ class ResNet183D(Classifer):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=(2,2,2))
         self.layer4 = self._make_layer(block, 512, layers[3], stride=(2,2,2))
         
-        self.maxpool2 = nn.MaxPool3d((1, 1, 1))
+        self.maxpool2 = nn.MaxPool3d((3, 3, 3))
 
         self.use_attention = use_attention
         if self.use_attention:
