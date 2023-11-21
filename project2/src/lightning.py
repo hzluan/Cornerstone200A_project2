@@ -11,7 +11,7 @@ import numpy as np
 from src.cindex import concordance_index
 
 class Classifer(pl.LightningModule):
-    def __init__(self, num_classes=9, init_lr=1e-4, use_attention=False, attention_mask=None):
+    def __init__(self, num_classes=9, init_lr=1e-4, use_attention=False):
         super().__init__()
         self.init_lr = init_lr
         self.num_classes = num_classes
@@ -19,7 +19,6 @@ class Classifer(pl.LightningModule):
         # Define loss fn for classifier
         ######################################
         self.use_attention = use_attention
-        self.attention_mask = attention_mask
         self.loss = nn.CrossEntropyLoss()
         
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
@@ -32,28 +31,33 @@ class Classifer(pl.LightningModule):
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
+        # torch.Size([6, 1, 256, 256, 200])
+        if len(torch.unique(A.nonzero()[:, 0])) == 0:
+            return 0
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
-        a = a / np.unique(A.nonzero()[0])
-        return -np.log(a).sum()
+        a = a / len(torch.unique(A.nonzero()[:, 0]))
+        return -np.log(a.cpu().numpy()).sum()
     
     def get_xy(self, batch):
         if isinstance(batch, list):
             x, y = batch[0], batch[1]
         else:
             assert isinstance(batch, dict)
-            x, y = batch["x"], batch["y_seq"][:,0]
-        return x, y.to(torch.long).view(-1)
+            x, y, annotation_mask = batch["x"], batch["y_seq"][:,0], batch['mask']
+        return x, y.to(torch.long).view(-1), annotation_mask
 
     def training_step(self, batch, batch_idx):
-        x, y = self.get_xy(batch)
+        x, y, annotation_mask = self.get_xy(batch)
 
         ## TODO: get predictions from your model and store them as y_hat
         ###################################################
         y_hat, alpha = self.forward(x)
+        y_hat = y_hat[:, 1]
+
         if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            attention_loss = self.AttentionLoss(alpha, annotation_mask)
             attn_weight = 0.5
             loss = attn_weight*attention_loss + self.loss(y_hat, y)
         else:
@@ -72,12 +76,13 @@ class Classifer(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = self.get_xy(batch)
+        x, y, annotation_mask = self.get_xy(batch)
         #################################################
         y_hat, alpha = self.forward(x)
+        y_hat = y_hat[:, 1]
 
         if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            attention_loss = self.AttentionLoss(alpha, annotation_mask)
             loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
@@ -95,11 +100,13 @@ class Classifer(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        x, y = self.get_xy(batch)
+        x, y, annotation_mask = self.get_xy(batch)
         ###############################
         y_hat, alpha = self.forward(x)
+        y_hat = y_hat[:, 1]
+
         if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            attention_loss = self.AttentionLoss(alpha, annotation_mask)
             loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
@@ -337,7 +344,7 @@ class BasicBlock3D(nn.Module):
     
 class ResNet183D(Classifer):
 
-    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, use_attention=False, init_lr=1e-4, random_init=False, **kwargs):
+    def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=2, pretrained=False, use_attention=False, init_lr=1e-4, random_init=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.inplanes = 64
@@ -443,8 +450,6 @@ class ResNet183D(Classifer):
         if self.use_attention:
             alpha = self.attention(residual)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            # print('################')
-            # print(alpha.size(), x.size())
             attn_pooling = alpha*residual
             # add maxpooling layer and concatenate
             attn_pooling = self.fc_attn(attn_pooling) # B, 1, D, H, 128
