@@ -371,10 +371,11 @@ class ResNet183D(Classifer):
             self.fc = nn.Linear(4096, num_classes)
 
         if self.pretrained:
-            model_weight_path = '../models/resnet18-5c106cde.pth'
-            pretrained_weights = torch.load(model_weight_path)
-            pretrained_model = resnet18()
-            pretrained_model.load_state_dict(pretrained_weights)
+            pretrained_model = resnet18(pretrained=True)
+            # model_weight_path = '../models/resnet18-5c106cde.pth'
+            # pretrained_weights = torch.load(model_weight_path)
+            # pretrained_model = resnet18()
+            # pretrained_model.load_state_dict(pretrained_weights)
             # self.conv1.weight.data = self.repeat_weights(pretrained_model.conv1.weight.data, 200)
             if self.random_init:
                 for name, module in pretrained_model.named_modules():

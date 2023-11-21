@@ -234,12 +234,13 @@ class NLST(pl.LightningDataModule):
             dataset_majority = [sample for sample in self.train if sample['y'] == 0]
             dataset_minority = [sample for sample in self.train if sample['y'] == 1]
             imbalance_ratio = len(dataset_majority) // len(dataset_minority)
-            # 1. Weighted Random Sampler
-            sampler = torch.utils.data.WeightedRandomSampler([1, imbalance_ratio], num_samples=len(self.train)*imbalance_ratio, replacement=True)
-            dataloader = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, sampler=sampler, num_workers=self.num_workers, shuffle=True)
+            # make weight array for cancer data points
+            weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train]
+            # Weighted Random Sampler
+            sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples=len(self.train), replacement=True)
+            return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, sampler=sampler, num_workers=self.num_workers, shuffle=False)
         else:
-            dataloader = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
-        return dataloader
+            return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
@@ -298,6 +299,7 @@ class NLST_Dataset(torch.utils.data.Dataset):
         sample['x'], sample['mask'] = subject['x']['data'].to(torch.float), subject['mask']['data'].to(torch.float)
         ## Normalize volume to have 0 pixel mean and unit variance
         sample['x'] = self.normalize(sample['x'])
+        breakpoint()
 
         ## Remove potentially none items for batch collation
         del sample['bounding_boxes']
