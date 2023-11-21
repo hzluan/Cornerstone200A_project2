@@ -209,11 +209,11 @@ class NLST(pl.LightningDataModule):
             # 1. Weighted Random Sampler
             sampler = torch.utils.data.WeightedRandomSampler([1, imbalance_ratio], num_samples=len(self.train)*imbalance_ratio, replacement=True)
             dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, sampler=sampler)
-            # 2. Over sampling the minority class
+            # 2. Over sampling the minority class Don't do!
             oversampled_minority = torch.utils.data.ConcatDataset([dataset_minority] * imbalance_ratio)
             combined_dataset = torch.utils.data.ConcatDataset([dataset_majority, oversampled_minority])
             dataloader = torch.utils.data.DataLoader(combined_dataset, batch_size=self.batch_size, shuffle=True)
-            # 3. Use weighted loss
+            # 3. Use weighted loss most still have no cancer, it's a bigger problem because batch so small, bunch of batches don't have cancer patients. it learns to set tihngs to 'no cancer' until sees cancer, huge gradient, big unstable.
             # This is implemented in the loss function in lightning.py
 
             # 4. Augment the minority dataset more

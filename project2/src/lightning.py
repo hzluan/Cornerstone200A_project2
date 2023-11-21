@@ -30,7 +30,13 @@ class Classifer(pl.LightningModule):
         self.test_outputs = []
 
     def AttentionLoss(alpha, A):
-        return -np.log(torch.mm(alpha, A)).sum()
+        # noremalise by things that have annpotations
+        # view so dimension is batch, 1
+        a = alpha*A
+        a = a.view(alpha.size(0), -1)
+        # normalise a by number A with none zero values
+        a = a / 
+        return -np.log(a).sum()
     
     def get_xy(self, batch):
         if isinstance(batch, list):
@@ -48,6 +54,7 @@ class Classifer(pl.LightningModule):
         y_hat, alpha = self.forward(x)
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, self.attention_mask)
+            # add a lambda to the attention loss
             loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
@@ -287,6 +294,7 @@ class CNN3D(Classifer):
             alpha = self.attention(x)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
             h = torch.mm(alpha, h)
+            # add maxpooling layer and concatenate
         h_logit = self.fc(h)
         return h_logit, alpha
 
@@ -311,11 +319,8 @@ class BasicBlock3D(nn.Module):
 
     def forward(self, x):
         residual = x
-        print("############################3")
-        print(f"Input shape to conv1: {x.shape}")
 
         out = self.conv1(x)
-        print(f"Output shape from conv1: {out.shape}")
         out = self.bn1(out)
         out = self.relu(out)
 
@@ -335,7 +340,7 @@ class ResNet183D(Classifer):
     def __init__(self, block=BasicBlock3D, layers=[2,2,2,2], num_classes=9, pretrained=False, init_lr=1e-4, random_init=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
-        self.inplanes = 200
+        self.inplanes = 64
         self.pretrained = pretrained
         self.random_init = random_init
         
@@ -385,7 +390,7 @@ class ResNet183D(Classifer):
         
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
-                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 200)
+                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 64)
                 model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 64)
                 
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
@@ -425,7 +430,7 @@ class ResNet183D(Classifer):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
 
-        return x
+        return x,  None
 
 class R3D(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
