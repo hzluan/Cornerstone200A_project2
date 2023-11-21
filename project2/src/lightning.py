@@ -107,10 +107,10 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = attention_loss + self.loss(y_hat, y)
+            loss = attention_loss + self.loss(y_hat[:, 1], y)
         else:
             attention_loss = 0
-            loss = self.loss(y_hat, y)
+            loss = self.loss(y_hat[:, 1], y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
@@ -361,7 +361,7 @@ class ResNet183D(Classifer):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=(2,2,2))
         self.layer4 = self._make_layer(block, 512, layers[3], stride=(2,2,2))
         
-        self.maxpool2 = nn.MaxPool3d((1, 1, 1))
+        self.maxpool2 = nn.MaxPool3d((3, 3, 3))
 
         self.use_attention = use_attention
         if self.use_attention:
@@ -371,7 +371,7 @@ class ResNet183D(Classifer):
             self.fc_max = nn.Linear(512, 128)
             self.fc = nn.Linear(128, num_classes)
         else:
-            self.fc = nn.Linear(512, num_classes)
+            self.fc = nn.Linear(4096, num_classes)
 
         if self.pretrained:
             pretrained_model = resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
@@ -454,12 +454,12 @@ class ResNet183D(Classifer):
             # add maxpooling layer and concatenate
             attn_pooling = self.fc_attn(attn_pooling) # B, 1, D, H, 128
             max_pooling = self.fc_max(max_pooling) # B, X, 128
-            x = torch.concat([attn_pooling.view(B, -1, attn_pooling.size()[-1]), max_pooling], dim=1)
+            x = torch.concat([attn_pooling.view(B, -1, attn_pooling.size()[-1]), max_pooling], dim=1).view(B,-1)
             x = self.fc(x)
             return x, alpha
         else:
+            max_pooling = max_pooling.view(B, -1)
             x = self.fc(max_pooling)
-
             return x,  alpha
 
 class R3D(Classifer):
