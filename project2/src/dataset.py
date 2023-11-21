@@ -123,32 +123,25 @@ class NLST(pl.LightningDataModule):
         )
         resize = tio.transforms.Resize(self.img_size + [self.num_images])
 
-
-        self.train_transform = tio.transforms.Compose([
-            resample,
-            padding,
-            resize,
-        ])
-
-        ##########################################
         if self.use_data_augmentation:
-            transforms_dict = [
-            tio.RandomAffine(),
-            tio.RandomElasticDeformation(),
-            tio.RandomFlip(),
-            tio.RandomAffine(scales=(0.9, 1.2),degrees=180),
-            tio.RandomNoise()
-        ]
-            self.train_transform = torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(),
-                tio.OneOf(transforms_dict)
+            transforms_dict = [tio.RandomAffine(),
+                               tio.RandomElasticDeformation(),
+                               tio.RandomFlip(),
+                               tio.RandomAffine(scales=(0.9, 1.2),degrees=180),
+                               tio.RandomNoise()]
+            self.train_transform = tio.transforms.Compose([
+                tio.OneOf(transforms_dict),
+                resample,
+                padding,
+                resize,
             ])
-
+        
         else:
-            self.train_transform = torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor()
+            self.train_transform = tio.transforms.Compose([
+                resample,
+                padding,
+                resize,
             ])
-
 
         self.test_transform = tio.transforms.Compose([
             resample,
