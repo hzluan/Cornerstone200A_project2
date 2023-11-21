@@ -98,9 +98,9 @@ def main(args: argparse.Namespace):
     else:
         model = NAME_TO_MODEL_CLASS[args.model_name].load_from_checkpoint(args.checkpoint_path)
     print("Initializing trainer")
-    # logger = pl.loggers.WandbLogger(project=args.project_name)
+    logger = pl.loggers.WandbLogger(project=args.project_name)
     args.trainer.accelerator = 'auto'
-    # args.trainer.logger = logger
+    args.trainer.logger = logger
     args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended
 
     args.trainer.callbacks = [
