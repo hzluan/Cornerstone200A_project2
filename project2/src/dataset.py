@@ -197,36 +197,6 @@ class NLST(pl.LightningDataModule):
 
                     dataset.append(sample)
 
-        if self.class_balance:
-            # This data is highly imbalanced!
-            # Introduce a method to deal with class imbalance (hint: think about your data loader)
-            ##################################3
-            # Several ways to deal with imbalanced dataset
-            # Extract minority and majority datasets
-            dataset_majority = [sample for sample in self.train if sample['y'] == 0]
-            dataset_minority = [sample for sample in self.train if sample['y'] == 1]
-            imbalance_ratio = len(dataset_majority) // len(dataset_minority)
-            # 1. Weighted Random Sampler
-            sampler = torch.utils.data.WeightedRandomSampler([1, imbalance_ratio], num_samples=len(self.train)*imbalance_ratio, replacement=True)
-            dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, sampler=sampler)
-            # 2. Over sampling the minority class Don't do!
-            oversampled_minority = torch.utils.data.ConcatDataset([dataset_minority] * imbalance_ratio)
-            combined_dataset = torch.utils.data.ConcatDataset([dataset_majority, oversampled_minority])
-            dataloader = torch.utils.data.DataLoader(combined_dataset, batch_size=self.batch_size, shuffle=True)
-            # 3. Use weighted loss most still have no cancer, it's a bigger problem because batch so small, bunch of batches don't have cancer patients. it learns to set tihngs to 'no cancer' until sees cancer, huge gradient, big unstable.
-            # This is implemented in the loss function in lightning.py
-
-            # 4. Augment the minority dataset more
-            augmented_minority = []
-            for _ in range(imbalance_ratio):
-                augmented_minority.append(self.prepare_data_transforms(image) for image in dataset_minority)
-
-            combined_dataset = torch.utils.data.DataLoaderConcatDataset([dataset_majority, augmented_minority])
-            dataloader = torch.utils.data.DataLoaderDataLoader(combined_dataset, batch_size=self.batch_size, shuffle=True)
-
-
-            raise NotImplementedError("Not implemented yet")
-
         self.train = NLST_Dataset(self.train, self.train_transform, self.normalize, self.img_size, self.num_images)
         self.val = NLST_Dataset(self.val, self.test_transform, self.normalize, self.img_size, self.num_images)
         self.test = NLST_Dataset(self.test, self.test_transform, self.normalize, self.img_size, self.num_images)
@@ -257,7 +227,19 @@ class NLST(pl.LightningDataModule):
         return y, y_seq.astype("float64"), y_mask.astype("float64"), time_at_event
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+        if self.class_balance:
+            # This data is highly imbalanced!
+            # Introduce a method to deal with class imbalance (hint: think about your data loader)
+            # Extract minority and majority datasets
+            dataset_majority = [sample for sample in self.train if sample['y'] == 0]
+            dataset_minority = [sample for sample in self.train if sample['y'] == 1]
+            imbalance_ratio = len(dataset_majority) // len(dataset_minority)
+            # 1. Weighted Random Sampler
+            sampler = torch.utils.data.WeightedRandomSampler([1, imbalance_ratio], num_samples=len(self.train)*imbalance_ratio, replacement=True)
+            dataloader = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, sampler=sampler, num_workers=self.num_workers, shuffle=True)
+        else:
+            dataloader = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+        return dataloader
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
