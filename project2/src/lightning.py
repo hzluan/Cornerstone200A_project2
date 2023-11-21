@@ -54,13 +54,6 @@ class Classifer(pl.LightningModule):
         y_hat, alpha = self.forward(x)
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, self.attention_mask)
-            print('################################')
-            print('attention loss')
-            print(attention_loss)
-            print('cross entropy loss')
-            print(self.loss(y_hat, y))
-            print('################################')
-            # add a lambda to the attention loss
             attn_weight = 0.5
             loss = attn_weight*attention_loss + self.loss(y_hat, y)
         else:
