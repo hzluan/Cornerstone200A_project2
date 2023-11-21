@@ -29,7 +29,7 @@ class Classifer(pl.LightningModule):
         self.validation_outputs = []
         self.test_outputs = []
 
-    def AttentionLoss(alpha, A):
+    def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
         a = alpha*A
@@ -281,7 +281,7 @@ class CNN3D(Classifer):
 
         self.use_attention = use_attention
         if self.use_attention:
-            self.attention = nn.Conv3d(in_channels=output_dim, out_channels=1,
+            self.attention = nn.Conv3d(in_channels=input_chan, out_channels=1,
                                     kernel_size=1, stride=1)
         
         self.fc = nn.Linear(output_dim, num_classes)
@@ -358,11 +358,13 @@ class ResNet183D(Classifer):
 
         self.use_attention = use_attention
         if self.use_attention:
-            self.attention = nn.Conv3d(in_channels=512 * block.expansion, out_channels=1,
+            self.attention = nn.Conv3d(in_channels=1, out_channels=1,
                                     kernel_size=1, stride=1)
-            self.fc = nn.Linear(512 * 2 * block.expansion, num_classes)
+            self.fc_attn = nn.Linear(200, 128)
+            self.fc_max = nn.Linear(512, 128)
+            self.fc = nn.Linear(128, num_classes)
         else:
-            self.fc = nn.Linear(512 * block.expansion, num_classes)
+            self.fc = nn.Linear(512, num_classes)
 
         if self.pretrained:
             pretrained_model = resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
@@ -434,20 +436,26 @@ class ResNet183D(Classifer):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-
+        # 6, 512, 8, 8, 7
         max_pooling = self.maxpool2(x)
+        max_pooling = max_pooling.view(B, -1, max_pooling.size()[1])
         alpha = None
         if self.use_attention:
             alpha = self.attention(residual)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            attn_pooling = alpha*x
+            # print('################')
+            # print(alpha.size(), x.size())
+            attn_pooling = alpha*residual
             # add maxpooling layer and concatenate
-            x = torch.stack([max_pooling, attn_pooling])
+            attn_pooling = self.fc_attn(attn_pooling) # B, 1, D, H, 128
+            max_pooling = self.fc_max(max_pooling) # B, X, 128
+            x = torch.concat([attn_pooling.view(B, -1, attn_pooling.size()[-1]), max_pooling], dim=1)
+            x = self.fc(x)
+            return x, alpha
+        else:
+            x = self.fc(max_pooling)
 
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-
-        return x,  alpha
+            return x,  alpha
 
 class R3D(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
