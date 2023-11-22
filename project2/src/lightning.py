@@ -409,9 +409,6 @@ class ResNet183D(Classifer):
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
                 model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 3)
-                # print(model_block.conv1.weight.data.size())
-                print('############################')
-                print('printing model_block.conv1.weight.data.size()')
                 print(model_block.conv1.weight.data.size())
                 model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 3)
                 
@@ -440,12 +437,7 @@ class ResNet183D(Classifer):
     def forward(self, x):
         B, C, D, H, W = x.size()
         residual = x
-        print('######################')
-        print('printing x.size()')
-        print(x.size())
         x = self.conv1(x)
-        print('printing conv1(x).size()')
-        print(x.size())
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
