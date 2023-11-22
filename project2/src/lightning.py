@@ -33,6 +33,8 @@ class Classifer(pl.LightningModule):
         # view so dimension is batch, 1
         if len(torch.unique(A.nonzero()[:, 0])) == 0:
             return 0
+        # maxpool A with kernel(7,7,7)
+        A = F.max_pool3d(A, kernel_size=(7,7,7))
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
