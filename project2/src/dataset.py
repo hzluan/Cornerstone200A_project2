@@ -299,7 +299,6 @@ class NLST_Dataset(torch.utils.data.Dataset):
         sample['x'], sample['mask'] = subject['x']['data'].to(torch.float), subject['mask']['data'].to(torch.float)
         ## Normalize volume to have 0 pixel mean and unit variance
         sample['x'] = self.normalize(sample['x'])
-        breakpoint()
 
         ## Remove potentially none items for batch collation
         del sample['bounding_boxes']
