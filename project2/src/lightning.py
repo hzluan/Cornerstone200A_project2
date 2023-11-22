@@ -34,7 +34,7 @@ class Classifer(pl.LightningModule):
         if len(torch.unique(A.nonzero()[:, 0])) == 0:
             return 0
         # Maxpool A 
-        A = F.max_pool3d(A, kernel_size=(7,7,7))
+        A = F.max_pool3d(A, kernel_size=7)
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
@@ -249,7 +249,7 @@ class ResNet18(Classifer):
         return x, None
 
 class CNN3D(Classifer):
-    def __init__(self, input_dim=256*256*200*3, input_chan=1, out_chan=32, num_layers=3, kernel_size=(3,3,3), stride = 1, num_classes=9, use_bn=False, use_attention=False, attention_mask=None, **kwargs):
+    def __init__(self, input_dim=256*256*200*3, input_chan=1, out_chan=32, num_layers=3, kernel_size=3, stride = 1, num_classes=9, use_bn=False, use_attention=False, attention_mask=None, **kwargs):
         super().__init__(num_classes=num_classes)
         self.save_hyperparameters()
 
@@ -324,8 +324,6 @@ class BasicBlock3D(nn.Module):
 
     def forward(self, x):
         residual = x
-        print('########################')
-        print(x.size())
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -350,15 +348,15 @@ class ResNet183D(Classifer):
         self.pretrained = pretrained
         self.random_init = random_init
         
-        self.conv1 = nn.Conv3d(1, 64, kernel_size=(7,7,7), stride=(2,2,2), padding=3, bias=False)
+        self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool3d(kernel_size=(3,3,3), stride=2, padding=1)
+        self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=(2,2,2))
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=(2,2,2))
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=(2,2,2))
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         
         self.maxpool2 = nn.MaxPool3d((3, 3, 3))
 
@@ -396,7 +394,7 @@ class ResNet183D(Classifer):
 
     def repeat_weights(self, w2d, num_repeats):
         c_out, c_in, h, w = w2d.size()
-        w3d = w2d.repeat(1, 1, num_repeats, 1, 1) / num_repeats
+        w3d = w2d.unsqueeze(4).repeat(1, 1, 1, 1, 1, num_repeats) 
         return w3d
     
     def _initialize_3d_from_2d(self, pretrained_model):
@@ -410,8 +408,12 @@ class ResNet183D(Classifer):
         
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
-                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 64)
-                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 64)
+                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 3)
+                # print(model_block.conv1.weight.data.size())
+                print('############################')
+                print('printing model_block.conv1.weight.data.size()')
+                print(model_block.conv1.weight.data.size())
+                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 3)
                 
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
                 model_block.bn1.bias.data = pre_block.bn1.bias.data.clone()
@@ -423,7 +425,7 @@ class ResNet183D(Classifer):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=(1,1,1), stride=stride, bias=False),
+                nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm3d(planes * block.expansion),
             )
 
@@ -438,7 +440,12 @@ class ResNet183D(Classifer):
     def forward(self, x):
         B, C, D, H, W = x.size()
         residual = x
+        print('######################')
+        print('printing x.size()')
+        print(x.size())
         x = self.conv1(x)
+        print('printing conv1(x).size()')
+        print(x.size())
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
