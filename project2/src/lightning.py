@@ -307,7 +307,7 @@ class CNN3D(Classifer):
 # for 3d resnet18
 def conv3x3x3(in_planes, out_planes, stride=1):
     # 3x3x3 convolution with padding
-    return nn.Conv3d(in_planes, out_planes, kernel_size=(3,3,3), stride=stride, padding=1, bias=False)
+    return nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
 
 class BasicBlock3D(nn.Module):
     expansion = 1
@@ -394,7 +394,7 @@ class ResNet183D(Classifer):
 
     def repeat_weights(self, w2d, num_repeats):
         c_out, c_in, h, w = w2d.size()
-        w3d = w2d.unsqueeze(4).repeat(1, 1, 1, 1, 1, num_repeats) 
+        w3d = w2d.unsqueeze(4).repeat(1, 1, 1, 1, num_repeats) 
         return w3d
     
     def _initialize_3d_from_2d(self, pretrained_model):
@@ -409,9 +409,7 @@ class ResNet183D(Classifer):
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
                 model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 3)
-                print(model_block.conv1.weight.data.size())
                 model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 3)
-                
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
                 model_block.bn1.bias.data = pre_block.bn1.bias.data.clone()
                 model_block.bn2.weight.data = pre_block.bn2.weight.data.clone()
