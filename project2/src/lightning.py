@@ -324,8 +324,6 @@ class BasicBlock3D(nn.Module):
 
     def forward(self, x):
         residual = x
-        print('########################')
-        print(x.size())
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -411,6 +409,7 @@ class ResNet183D(Classifer):
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
                 model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 64)
+                # torch.Size([1, 64, 4096, 3, 3])
                 model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 64)
                 
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
@@ -438,7 +437,9 @@ class ResNet183D(Classifer):
     def forward(self, x):
         B, C, D, H, W = x.size()
         residual = x
+        # torch.Size([B, 1, 256, 256, 200])
         x = self.conv1(x)
+        # torch.Size([B, 64, 128, 128, 100])
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
