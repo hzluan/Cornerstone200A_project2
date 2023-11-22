@@ -33,8 +33,6 @@ class Classifer(pl.LightningModule):
         # view so dimension is batch, 1
         if len(torch.unique(A.nonzero()[:, 0])) == 0:
             return 0
-        # maxpool A with kernel(7,7,7)
-        A = F.max_pool3d(A, kernel_size=(7,7,7))
         a = alpha*A
         a = a.view(alpha.size(0), -1)
         # normalise a by number A with none zero values
@@ -324,7 +322,8 @@ class BasicBlock3D(nn.Module):
 
     def forward(self, x):
         residual = x
-
+        print('########################')
+        print(x.size())
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -441,7 +440,6 @@ class ResNet183D(Classifer):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -453,10 +451,10 @@ class ResNet183D(Classifer):
         if self.use_attention:
             alpha = self.attention(residual)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            attn_pooling = alpha*residual
+            alpha = alpha*residual
             # add maxpooling layer and concatenate
-            attn_pooling = self.attn_maxpool(attn_pooling) # B, 1, 36, 36, 28
-            attn_pooling = self.fc_attn(attn_pooling.view(B, -1)) # B, 
+            alpha = self.attn_maxpool(alpha) # B, 1, 36, 36, 28
+            attn_pooling = self.fc_attn(alpha.view(B, -1)) # B, 
             # print(max_pooling.size(), attn_pooling.size())
             max_pooling = self.fc_max(max_pooling) # B, 8, 28
             # print(max_pooling.size(), attn_pooling.size())
