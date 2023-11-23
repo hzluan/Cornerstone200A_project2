@@ -105,10 +105,10 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = attention_loss + self.loss(y_hat[:, 1], y)
+            loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
-            loss = self.loss(y_hat[:, 1], y)
+            loss = self.loss(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
@@ -307,7 +307,7 @@ class CNN3D(Classifer):
 # for 3d resnet18
 def conv3x3x3(in_planes, out_planes, stride=1):
     # 3x3x3 convolution with padding
-    return nn.Conv3d(in_planes, out_planes, kernel_size=(3,3,3), stride=stride, padding=1, bias=False)
+    return nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
 
 class BasicBlock3D(nn.Module):
     expansion = 1
@@ -394,7 +394,7 @@ class ResNet183D(Classifer):
 
     def repeat_weights(self, w2d, num_repeats):
         c_out, c_in, h, w = w2d.size()
-        w3d = w2d.unsqueeze(4).repeat(1, 1, 1, 1, 1, num_repeats) 
+        w3d = w2d.unsqueeze(4).repeat(1, 1, 1, 1, num_repeats) 
         return w3d
     
     def _initialize_3d_from_2d(self, pretrained_model):
@@ -408,10 +408,8 @@ class ResNet183D(Classifer):
         
         for pre_layer, model_layer in zip(pretrained_layers, model_layers):
             for pre_block, model_block in zip(pre_layer, model_layer):
-                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 64)
-                # torch.Size([1, 64, 4096, 3, 3])
-                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 64)
-                
+                model_block.conv1.weight.data = self.repeat_weights(pre_block.conv1.weight.data, 3)
+                model_block.conv2.weight.data = self.repeat_weights(pre_block.conv2.weight.data, 3)
                 model_block.bn1.weight.data = pre_block.bn1.weight.data.clone()
                 model_block.bn1.bias.data = pre_block.bn1.bias.data.clone()
                 model_block.bn2.weight.data = pre_block.bn2.weight.data.clone()
@@ -437,12 +435,7 @@ class ResNet183D(Classifer):
     def forward(self, x):
         B, C, D, H, W = x.size()
         residual = x
-        # torch.Size([B, 1, 256, 256, 200])
-        print('######################')
-        print('printing x.size()')
-        print(x.size())
         x = self.conv1(x)
-        # torch.Size([B, 64, 128, 128, 100])
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
@@ -461,9 +454,7 @@ class ResNet183D(Classifer):
             # add maxpooling layer and concatenate
             alpha = self.attn_maxpool(alpha) # B, 1, 36, 36, 28
             attn_pooling = self.fc_attn(alpha.view(B, -1)) # B, 
-            # print(max_pooling.size(), attn_pooling.size())
             max_pooling = self.fc_max(max_pooling) # B, 8, 28
-            # print(max_pooling.size(), attn_pooling.size())
             x = torch.concat([attn_pooling, max_pooling.view(B,-1)], dim=1)
             x = self.fc(x)
             return x, alpha
