@@ -231,11 +231,17 @@ class NLST(pl.LightningDataModule):
             # This data is highly imbalanced!
             # Introduce a method to deal with class imbalance (hint: think about your data loader)
             # Extract minority and majority datasets
-            dataset_majority = [sample for sample in self.train if sample['y_seq'][0] == 0]
-            dataset_minority = [sample for sample in self.train if sample['y_seq'][0] == 1]
+            # d['y_seq'][0] for d in self.dataset
+            dataset_majority = []
+            dataset_minority = []
+            for d in self.train.dataset:
+                if d['y_seq'][0] == 0:
+                    dataset_majority.append(d)
+                else:
+                    dataset_minority.append(d)
             imbalance_ratio = len(dataset_majority) // len(dataset_minority)
             # make weight array for cancer data points
-            weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train]
+            weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train.dataset]
             # Weighted Random Sampler
             sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples=len(self.train), replacement=True)
             

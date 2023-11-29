@@ -1,6 +1,7 @@
 
 import argparse
 import sys
+import os
 from os.path import dirname, realpath
 
 sys.path.append(dirname(dirname(realpath(__file__))))
@@ -65,6 +66,12 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
         help="Whether to train the model."
     )
 
+    parser.add_argument(
+        "--wandb_online",
+        default=True,
+        help="Whether to use wandb online."
+    )
+
     return parser
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +88,10 @@ def parse_args() -> argparse.Namespace:
 
 def main(args: argparse.Namespace):
     print(args)
+
+    if not args.wandb_online:
+        os.environ["WANDB_MODE"]="offline"
+
     print("Loading data ..")
 
     print("Preparing lighning data module (encapsulates dataset init and data loaders)")
