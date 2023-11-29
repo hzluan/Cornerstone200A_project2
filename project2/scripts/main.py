@@ -3,6 +3,7 @@ import argparse
 import sys
 import os
 from os.path import dirname, realpath
+import wandb
 
 sys.path.append(dirname(dirname(realpath(__file__))))
 from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer,ResNet183D
@@ -67,8 +68,8 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
     )
 
     parser.add_argument(
-        "--wandb_online",
-        default=True,
+        "--wandb_offline",
+        default=False,
         help="Whether to use wandb online."
     )
 
@@ -89,8 +90,11 @@ def parse_args() -> argparse.Namespace:
 def main(args: argparse.Namespace):
     print(args)
 
-    if not args.wandb_online:
+    if args.wandb_offline:
         os.environ["WANDB_MODE"]="offline"
+    else:
+        os.environ["WANDB_MODE"]="online"
+
 
     print("Loading data ..")
 
@@ -109,7 +113,7 @@ def main(args: argparse.Namespace):
     else:
         model = NAME_TO_MODEL_CLASS[args.model_name].load_from_checkpoint(args.checkpoint_path)
     print("Initializing trainer")
-    logger = pl.loggers.WandbLogger(project=args.project_name)
+    logger = pl.loggers.WandbLogger(project=args.project_name, offline=args.wandb_offline)
     args.trainer.accelerator = 'auto'
     args.trainer.logger = logger
     args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended
