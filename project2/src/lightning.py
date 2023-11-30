@@ -544,7 +544,13 @@ class RiskModel(Classifer):
         # TODO: Initalize components of your model here
         self.model = R3D(num_classes=max(max_followup, num_classes), init_lr=init_lr, pretrained=pretrained, use_attention=use_attention)
 
-
+    def AttentionLoss(self, alpha, A):
+        # view so dimension is batch, 1
+        is_legit = torch.sum(A, (1, 2, 3)) > 0
+        likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
+        total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
+        avg_loss = torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
+        return avg_loss
 
     def forward(self, x):
         return self.model.forward(x)
@@ -569,24 +575,16 @@ class RiskModel(Classifer):
 
     def step(self, batch, batch_idx, stage, outputs):
         x, y_seq, y_mask, region_annotation_mask = self.get_xy(batch)
-        
-        # TODO: Get risk scores from your model
         y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
-        # TODO: Compute your loss (with or without localization)
-        # apply ignore_index -100 to y_hat according to y_mask
-        for i in range(len(y_hat.size()[0])):
-            for j in range(len(y_mask.size()[1])):
-                if y_mask[i][j] == 0:
-                    y_seq[i][j] = -100
 
         if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, region_annotation_mask)
-            attn_weight = 1e-5
-            loss = attn_weight*attention_loss*y_mask + self.loss(y_hat, y_seq)
-
+            attn_weight = 0.1
+            pred_loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
+            attn_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
+            loss = pred_loss + attn_loss*attn_weight
         else:
             attention_loss = 0
-            loss = self.loss(y_hat, y_seq)
+            loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
         
         # TODO: Log any metrics you want to wandb
         metric_value = self.accuracy(y_hat, y_seq)
