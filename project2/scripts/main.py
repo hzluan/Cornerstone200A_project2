@@ -5,7 +5,7 @@ import os
 from os.path import dirname, realpath
 import wandb
 import os
-# os.environ["WANDB_MODE"]="offline"
+os.environ["WANDB_MODE"]="offline"
 
 sys.path.append(dirname(dirname(realpath(__file__))))
 from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer,ResNet183D
@@ -115,9 +115,9 @@ def main(args: argparse.Namespace):
     else:
         model = NAME_TO_MODEL_CLASS[args.model_name].load_from_checkpoint(args.checkpoint_path)
 
-    import pdb; pdb.set_trace()
-    print(model)
-    print("Initializing trainer")
+    # import pdb; pdb.set_trace()
+    # print(model)
+    # print("Initializing trainer")
     logger = pl.loggers.WandbLogger(project=args.project_name, offline=args.wandb_offline)
     args.trainer.accelerator = 'auto'
     args.trainer.logger = logger
