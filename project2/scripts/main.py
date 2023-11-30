@@ -1,7 +1,9 @@
 
 import argparse
 import sys
+import os
 from os.path import dirname, realpath
+import wandb
 import os
 # os.environ["WANDB_MODE"]="offline"
 
@@ -67,6 +69,12 @@ def add_main_args(parser: LightningArgumentParser) -> LightningArgumentParser:
         help="Whether to train the model."
     )
 
+    parser.add_argument(
+        "--wandb_offline",
+        default=False,
+        help="Whether to use wandb online."
+    )
+
     return parser
 
 def parse_args() -> argparse.Namespace:
@@ -83,6 +91,13 @@ def parse_args() -> argparse.Namespace:
 
 def main(args: argparse.Namespace):
     print(args)
+
+    if args.wandb_offline:
+        os.environ["WANDB_MODE"]="offline"
+    else:
+        os.environ["WANDB_MODE"]="online"
+
+
     print("Loading data ..")
 
     print("Preparing lighning data module (encapsulates dataset init and data loaders)")
@@ -103,7 +118,7 @@ def main(args: argparse.Namespace):
     import pdb; pdb.set_trace()
     print(model)
     print("Initializing trainer")
-    logger = pl.loggers.WandbLogger(project=args.project_name)
+    logger = pl.loggers.WandbLogger(project=args.project_name, offline=args.wandb_offline)
     args.trainer.accelerator = 'auto'
     args.trainer.logger = logger
     args.trainer.precision = "bf16-mixed" ## This mixed precision training is highly recommended

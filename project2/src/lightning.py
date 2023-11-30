@@ -32,15 +32,13 @@ class Classifer(pl.LightningModule):
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
-        if len(torch.unique(A.nonzero()[:, 0])) == 0:
-            return 0
+        is_legit = torch.sum(A, (1, 2, 3)) > 0
         # Maxpool A 
         A = F.max_pool3d(A, kernel_size=7)
-        a = alpha*A
-        a = a.view(alpha.size(0), -1)
-        # normalise a by number A with none zero values
-        a = a / len(torch.unique(A.nonzero()[:, 0]))
-        return -np.log(a.detach().cpu().numpy()).sum()
+        likelihood = torch.sum(alpha*A, (1, 2, 3))
+        total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
+        avg_loss = torch.sum(torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor)))/(torch.sum(is_legit)+10e-9)
+        return avg_loss
     
     def get_xy(self, batch):
         if isinstance(batch, list):
