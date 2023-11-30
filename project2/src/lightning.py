@@ -35,8 +35,8 @@ class Classifer(pl.LightningModule):
         # Maxpool A 
         A = F.max_pool3d(A, kernel_size=7)
         likelihood = torch.sum(alpha*A, (1, 2, 3))
-        total_loss = -np.log(likelihood + 10e-9)
-        avg_loss = torch.sum(is_legit*total_loss)/(torch.sum(is_legit)+10e-9)
+        total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
+        avg_loss = torch.sum(torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor)))/(torch.sum(is_legit)+10e-9)
         return avg_loss
     
     def get_xy(self, batch):
