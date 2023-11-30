@@ -109,6 +109,7 @@ class NLST(pl.LightningDataModule):
         self.valid_exam_path = valid_exam_path
         self.class_balance = class_balance
         self.lungrads_path = lungrads_path
+        self.weights = []
 
         self.prepare_data_transforms()
 
@@ -124,16 +125,16 @@ class NLST(pl.LightningDataModule):
         resize = tio.transforms.Resize(self.img_size + [self.num_images])
 
         if self.use_data_augmentation:
-            transforms_dict = [tio.RandomAffine(),
-                               tio.RandomElasticDeformation(),
+            transforms_dict = [
+                            #    tio.RandomElasticDeformation(),
                                tio.RandomFlip(),
-                               tio.RandomAffine(scales=(0.9, 1.2),degrees=180),
-                               tio.RandomNoise()]
+                               tio.RandomAffine(scales=(0.9, 1.2),degrees=180)]
+                            #    tio.RandomNoise()]
             self.train_transform = tio.transforms.Compose([
-                tio.OneOf(transforms_dict),
                 resample,
                 padding,
                 resize,
+                tio.OneOf(transforms_dict)
             ])
         
         else:
@@ -196,6 +197,14 @@ class NLST(pl.LightningDataModule):
                     }
 
                     dataset.append(sample)
+        print(y_seq[0])
+        dataset_majority = [sample for sample in self.train if sample['y_seq'][0] == 0]
+        print(len(dataset_majority))
+        dataset_minority = [sample for sample in self.train if sample['y_seq'][0] == 1]
+        print(len(dataset_minority))
+        imbalance_ratio = len(dataset_majority) // len(dataset_minority)
+        # make weight array for cancer data points
+        self.weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train]
 
         self.train = NLST_Dataset(self.train, self.train_transform, self.normalize, self.img_size, self.num_images)
         self.val = NLST_Dataset(self.val, self.test_transform, self.normalize, self.img_size, self.num_images)
@@ -231,13 +240,8 @@ class NLST(pl.LightningDataModule):
             # This data is highly imbalanced!
             # Introduce a method to deal with class imbalance (hint: think about your data loader)
             # Extract minority and majority datasets
-            dataset_majority = [sample for sample in self.train if sample['y_seq'][0] == 0]
-            dataset_minority = [sample for sample in self.train if sample['y_seq'][0] == 1]
-            imbalance_ratio = len(dataset_majority) // len(dataset_minority)
-            # make weight array for cancer data points
-            weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train]
             # Weighted Random Sampler
-            sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples=len(self.train), replacement=True)
+            sampler = torch.utils.data.WeightedRandomSampler(self.weights, num_samples=len(self.train), replacement=True)
             
             return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, sampler=sampler, num_workers=self.num_workers, shuffle=False)
         else:

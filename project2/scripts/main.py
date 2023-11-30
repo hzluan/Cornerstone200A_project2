@@ -2,6 +2,8 @@
 import argparse
 import sys
 from os.path import dirname, realpath
+import os
+# os.environ["WANDB_MODE"]="offline"
 
 sys.path.append(dirname(dirname(realpath(__file__))))
 from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer,ResNet183D
@@ -97,6 +99,9 @@ def main(args: argparse.Namespace):
         model = NAME_TO_MODEL_CLASS[args.model_name](**vars(args[args.model_name]))
     else:
         model = NAME_TO_MODEL_CLASS[args.model_name].load_from_checkpoint(args.checkpoint_path)
+
+    import pdb; pdb.set_trace()
+    print(model)
     print("Initializing trainer")
     logger = pl.loggers.WandbLogger(project=args.project_name)
     args.trainer.accelerator = 'auto'
