@@ -446,7 +446,7 @@ class ResNet183D(Classifer):
             return x,  alpha
 
 class R3D(Classifer):
-    def __init__(self, num_classes=2, init_lr = 1e-3, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, num_classes=2, init_lr=1e-3, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.pretrained = pretrained
@@ -530,7 +530,7 @@ NLST_CENSORING_DIST = {
     "5": 0.9461840310101468,
 }
 class RiskModel(Classifer):
-    def __init__(self, input_num_chan=1, num_classes=2, init_lr = 1e-3, max_followup=6, **kwargs):
+    def __init__(self, input_num_chan=1, num_classes=2, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
@@ -540,17 +540,17 @@ class RiskModel(Classifer):
         self.max_followup = max_followup
 
         # TODO: Initalize components of your model here
-        raise NotImplementedError("Not implemented yet")
+        self.model = R3D(num_classes=max(max_followup, num_classes), init_lr=init_lr, pretrained=pretrained, use_attention=use_attention)
 
 
 
     def forward(self, x):
-        raise NotImplementedError("Not implemented yet")
+        return self.model.forward(x)
 
     def get_xy(self, batch):
         """
             x: (B, C, D, W, H) -  Tensor of CT volume
-            y_seq: (B, T) - Tensor of cancer outcomes. a vector of [0,0,1,1,1, 1] means the patient got between years 2-3, so
+            y_seq: (B, T) - Tensor of cancer outcomes. a vector of [0,0,1,1,1,1] means the patient got between years 2-3, so
             had cancer within 3 years, within 4, within 5, and within 6 years.
             y_mask: (B, T) - Tensor of mask indicating future time points are observed and not censored. For example, if y_seq = [0,0,0,0,0,0], then y_mask = [1,1,0,0,0,0], we only know that the patient did not have cancer within 2 years, but we don't know if they had cancer within 3 years or not.
             mask: (B, D, W, H) - Tensor of mask indicating which voxels are inside an annotated cancer region (1) or not (0).
@@ -564,16 +564,21 @@ class RiskModel(Classifer):
         x, y_seq, y_mask, region_annotation_mask = self.get_xy(batch)
 
         # TODO: Get risk scores from your model
-        y_hat = None ## (B, T) shape tensor of risk scores.
+        y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
         # TODO: Compute your loss (with or without localization)
-        loss = None
-
-        raise NotImplementedError("Not implemented yet")
+        if self.use_attention:
+            attention_loss = self.AttentionLoss(alpha, region_annotation_mask)
+            attn_weight = 1e-5
+            loss = attn_weight*attention_loss + self.loss(y_hat, y_seq)
+        else:
+            attention_loss = 0
+            loss = self.loss(y_hat, y_seq)
         
         # TODO: Log any metrics you want to wandb
-        metric_value = -1
-        metric_name = "dummy_metric"
-        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+        self.log('acc', self.accuracy(y_hat, y_seq), prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+        self.log('loss', loss, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+        self.log('attention_loss', attention_loss, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+
 
         # TODO: Store the predictions and labels for use at the end of the epoch for AUC and C-Index computation.
         outputs.append({
