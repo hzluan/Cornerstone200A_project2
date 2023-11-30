@@ -78,16 +78,10 @@ class Classifer(pl.LightningModule):
         #################################################
         y_hat, alpha = self.forward(x)
 
-        if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = self.loss(y_hat, y)
-        else:
-            attention_loss = 0
-            loss = self.loss(y_hat, y)
+        loss = self.loss(y_hat, y)
 
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
-        self.log('val_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
 
 
         self.validation_outputs.append({
@@ -101,15 +95,9 @@ class Classifer(pl.LightningModule):
         ###############################
         y_hat, alpha = self.forward(x)
 
-        if self.use_attention:
-            attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = self.loss(y_hat, y)
-        else:
-            attention_loss = 0
-            loss = self.loss(y_hat, y)
+        loss = self.loss(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
-        self.log('test_attention_loss', attention_loss, sync_dist=True,  prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
         
         self.test_outputs.append({
