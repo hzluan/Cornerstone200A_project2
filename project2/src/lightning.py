@@ -33,7 +33,6 @@ class Classifer(pl.LightningModule):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
         is_legit = torch.sum(A, (1, 2, 3)) > 0
-        print(A.size())
         likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
         total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
         avg_loss = torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
