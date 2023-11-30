@@ -50,9 +50,6 @@ class Classifer(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y, annotation_mask = self.get_xy(batch)
-
-        ## TODO: get predictions from your model and store them as y_hat
-        ###################################################
         y_hat, alpha = self.forward(x)
 
         if self.use_attention:
