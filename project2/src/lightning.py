@@ -493,8 +493,8 @@ class R3D(Classifer):
         if self.use_attention:
             alpha = self.attention(residual)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            alpha = alpha*residual
-            alpha = self.attn_maxpool(alpha) # B, 1, 36, 36, 28
+            output = alpha*residual
+            output = self.attn_maxpool(output) # B, 1, 36, 36, 28
             output = alpha.view(B, -1)
             for layer in self.attn_final:
                 output = layer(output)
