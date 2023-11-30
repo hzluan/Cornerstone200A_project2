@@ -548,9 +548,14 @@ class RiskModel(Classifer):
     def get_xy(self, batch):
         """
             x: (B, C, D, W, H) -  Tensor of CT volume
+            
             y_seq: (B, T) - Tensor of cancer outcomes. a vector of [0,0,1,1,1,1] means the patient got between years 2-3, so
             had cancer within 3 years, within 4, within 5, and within 6 years.
-            y_mask: (B, T) - Tensor of mask indicating future time points are observed and not censored. For example, if y_seq = [0,0,0,0,0,0], then y_mask = [1,1,0,0,0,0], we only know that the patient did not have cancer within 2 years, but we don't know if they had cancer within 3 years or not.
+            
+            y_mask: (B, T) - Tensor of mask indicating future time points are observed and not censored. 
+            For example, if y_seq = [0,0,0,0,0,0], then y_mask = [1,1,0,0,0,0], we only know that the patient did not have cancer within 2 years, 
+            but we don't know if they had cancer within 3 years or not.
+            
             mask: (B, D, W, H) - Tensor of mask indicating which voxels are inside an annotated cancer region (1) or not (0).
                 TODO: You can add more inputs here if you want to use them from the NLST dataloader.
                 Hint: You may want to change the mask definition to suit your localization method
@@ -560,22 +565,37 @@ class RiskModel(Classifer):
 
     def step(self, batch, batch_idx, stage, outputs):
         x, y_seq, y_mask, region_annotation_mask = self.get_xy(batch)
-
+        
         # TODO: Get risk scores from your model
         y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
         # TODO: Compute your loss (with or without localization)
+        # apply ignore_index -100 to y_hat according to y_mask
+        for i in range(len(y_hat.size()[0])):
+            for j in range(len(y_mask.size()[1])):
+                if y_mask[i][j] == 0:
+                    y_seq[i][j] = -100
+
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, region_annotation_mask)
             attn_weight = 1e-5
-            loss = attn_weight*attention_loss + self.loss(y_hat, y_seq)
+            loss = attn_weight*attention_loss*y_mask + self.loss(y_hat, y_seq)
+
         else:
             attention_loss = 0
             loss = self.loss(y_hat, y_seq)
         
         # TODO: Log any metrics you want to wandb
-        self.log('acc', self.accuracy(y_hat, y_seq), prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
-        self.log('loss', loss, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
-        self.log('attention_loss', attention_loss, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+        metric_value = self.accuracy(y_hat, y_seq)
+        metric_name = 'acc'
+        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+
+        metric_value = loss
+        metric_name = 'loss'
+        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
+
+        metric_value = attention_loss
+        metric_name = 'attention_loss'
+        self.log('{}_{}'.format(stage, metric_name), metric_value, prog_bar=True, on_epoch=True, on_step=True, sync_dist=True)
 
 
         # TODO: Store the predictions and labels for use at the end of the epoch for AUC and C-Index computation.
