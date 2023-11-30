@@ -460,13 +460,13 @@ class R3D(Classifer):
             self.attn_final.append(nn.Linear(36288, 128))
 
             self.attn_final.append(nn.Linear(128, num_classes))
-        else:
-            self.fc = nn.Linear(4096, num_classes)
 
         if self.pretrained:
             self.resnet3d = r3d_18(weights='DEFAULT')
         else:
             self.resnet3d = r3d_18()
+            
+        
 
         original_first_layer = self.resnet3d.stem[0]
         new_first_layer = torch.nn.Conv3d(1, 
@@ -480,7 +480,11 @@ class R3D(Classifer):
             new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
 
         setattr(self.resnet3d.stem, '0', new_first_layer)
-        self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
+        if not self.use_attention:
+            num_ftrs = self.resnet3d.fc.in_features
+            self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
+        else:
+            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
 
 
     def forward(self, x):
@@ -498,8 +502,8 @@ class R3D(Classifer):
                 output = layer(output)
             return output, alpha
         else:
-            max_pooling = max_pooling.view(B, -1)
-            x = self.fc(max_pooling)
+            # max_pooling = max_pooling.view(B, -1)
+            # x = self.fc(max_pooling)
             return x,  alpha
  
 class SwinTransformer(Classifer):
