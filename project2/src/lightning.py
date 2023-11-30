@@ -80,7 +80,7 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = attention_loss + self.loss(y_hat, y)
+            loss = self.loss(y_hat, y)
         else:
             attention_loss = 0
             loss = self.loss(y_hat, y)
@@ -103,7 +103,7 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = attention_loss + self.loss(y_hat, y)
+            loss = self.loss(y_hat, y)
         else:
             attention_loss = 0
             loss = self.loss(y_hat, y)
