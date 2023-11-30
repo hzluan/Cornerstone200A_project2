@@ -78,12 +78,10 @@ class Classifer(pl.LightningModule):
         x, y, annotation_mask = self.get_xy(batch)
         #################################################
         y_hat, alpha = self.forward(x)
-
         loss = self.loss(y_hat, y)
 
         self.log('val_loss', loss, sync_dist=True, prog_bar=True)
         self.log("val_acc", self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
-
 
         self.validation_outputs.append({
             "y_hat": y_hat,
@@ -451,7 +449,7 @@ class ResNet183D(Classifer):
             return x,  alpha
 
 class R3D(Classifer):
-    def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, num_classes=2, init_lr = 1e-3, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.pretrained = pretrained
@@ -463,7 +461,9 @@ class R3D(Classifer):
             self.attention = nn.Conv3d(in_channels=1, out_channels=1,
                                     kernel_size=1, stride=1)
             self.attn_maxpool = nn.MaxPool3d((7, 7, 7))
-            self.attn_final.append(nn.Linear(28, 128))
+            self.attn_final.append(nn.Flatten())
+            self.attn_final.append(nn.Linear(36288, 128))
+
             self.attn_final.append(nn.Linear(128, num_classes))
         else:
             self.fc = nn.Linear(4096, num_classes)
@@ -498,7 +498,7 @@ class R3D(Classifer):
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
             alpha = alpha*residual
             alpha = self.attn_maxpool(alpha) # B, 1, 36, 36, 28
-            output = alpha
+            output = alpha.view(B, -1)
             for layer in self.attn_final:
                 output = layer(output)
             return output, alpha
