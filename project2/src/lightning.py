@@ -33,6 +33,8 @@ class Classifer(pl.LightningModule):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
         is_legit = torch.sum(A, (1, 2, 3)) > 0
+        A_pool =  nn.AdaptiveMaxPool3d(alpha.size()[2:])
+        A = A_pool(A)
         likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
         total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
         avg_loss = torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
@@ -52,8 +54,7 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            attn_weight = 0.1
-            loss = attn_weight*attention_loss + self.loss(y_hat, y)
+            loss = attention_loss + self.loss(y_hat, y)
         else:
             attention_loss = 0
             loss = self.loss(y_hat, y)
@@ -452,22 +453,11 @@ class R3D(Classifer):
 
         self.attn_final = nn.ModuleList()
 
-        if self.use_attention:
-            self.attention = nn.Conv3d(in_channels=1, out_channels=1,
-                                    kernel_size=1, stride=1)
-            self.attn_maxpool = nn.MaxPool3d((7, 7, 7))
-            self.attn_final.append(nn.Flatten())
-            self.attn_final.append(nn.Linear(36288, 128))
-
-            self.attn_final.append(nn.Linear(128, num_classes))
-
         if self.pretrained:
             self.resnet3d = r3d_18(weights='DEFAULT')
         else:
             self.resnet3d = r3d_18()
             
-        
-
         original_first_layer = self.resnet3d.stem[0]
         new_first_layer = torch.nn.Conv3d(1, 
                                         original_first_layer.out_channels, 
@@ -480,30 +470,33 @@ class R3D(Classifer):
             new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
 
         setattr(self.resnet3d.stem, '0', new_first_layer)
-        if not self.use_attention:
+        if self.use_attention:
+            self.attention = nn.Conv3d(in_channels=512, out_channels=1,
+                                    kernel_size=1, stride=1)
+            self.attn_final.append(nn.Linear(512, 128))
+            self.attn_final.append(nn.BatchNorm1d(128))
+            self.attn_final.append(nn.ReLU())
+            self.attn_final.append(nn.Linear(128, num_classes))
+            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
+        else:
             num_ftrs = self.resnet3d.fc.in_features
             self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
-        else:
-            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
-
 
     def forward(self, x):
         B, C, D, H, W = x.size()
-        residual = x
         x = self.resnet3d(x)
         alpha = None
         if self.use_attention:
-            alpha = self.attention(residual)
-            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
-            output = alpha*residual
-            output = self.attn_maxpool(output) # B, 1, 36, 36, 28
+            alpha = self.attention(x)
+            B, C_new, D_new, H_new, W_new = alpha.shape
+            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D_new, H_new, W_new)
+            output = alpha*x
+            output = output.sum(dim=(2,3,4))
             output = output.view(B, -1)
             for layer in self.attn_final:
                 output = layer(output)
             return output, alpha
         else:
-            # max_pooling = max_pooling.view(B, -1)
-            # x = self.fc(max_pooling)
             return x,  alpha
  
 class SwinTransformer(Classifer):
@@ -532,7 +525,7 @@ NLST_CENSORING_DIST = {
     "5": 0.9461840310101468,
 }
 class RiskModel(Classifer):
-    def __init__(self, input_num_chan=1, num_classes=2, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, input_num_chan=1, num_classes=6, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
@@ -578,10 +571,9 @@ class RiskModel(Classifer):
         y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
 
         if self.use_attention:
-            attn_weight = 0.1
             pred_loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
             attn_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
-            loss = pred_loss + attn_loss*attn_weight
+            loss = pred_loss + attn_loss
         else:
             attention_loss = 0
             loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)

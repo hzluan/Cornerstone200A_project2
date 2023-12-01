@@ -4,8 +4,6 @@ import sys
 import os
 from os.path import dirname, realpath
 import wandb
-import os
-os.environ["WANDB_MODE"]="offline"
 
 sys.path.append(dirname(dirname(realpath(__file__))))
 from src.lightning import MLP, RiskModel, ResNet18, CNN, CNN3D, R3D, SwinTransformer,ResNet183D
