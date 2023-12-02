@@ -33,11 +33,12 @@ class Classifer(pl.LightningModule):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
         is_legit = torch.sum(A, (1, 2, 3)) > 0
+        is_legit = is_legit.to('cuda')
         A_pool =  nn.AdaptiveMaxPool3d(alpha.size()[2:])
         A = A_pool(A)
         likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
-        total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
-        avg_loss = torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
+        total_loss = -torch.log(likelihood.detach() + 10e-9)
+        avg_loss = torch.einsum('ij, ik -> ', is_legit.type(torch.LongTensor), total_loss.type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
         return avg_loss
     
     def get_xy(self, batch):
@@ -466,8 +467,7 @@ class R3D(Classifer):
                                         padding=original_first_layer.padding, 
                                         bias=False)
 
-        with torch.no_grad():
-            new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
+        new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
 
         setattr(self.resnet3d.stem, '0', new_first_layer)
         if self.use_attention:
@@ -537,14 +537,6 @@ class RiskModel(Classifer):
         # TODO: Initalize components of your model here
         self.model = R3D(num_classes=max(max_followup, num_classes), init_lr=init_lr, pretrained=pretrained, use_attention=use_attention)
 
-    def AttentionLoss(self, alpha, A):
-        # view so dimension is batch, 1
-        is_legit = torch.sum(A, (1, 2, 3)) > 0
-        likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
-        total_loss = -torch.log(likelihood.detach().cpu() + 10e-9)
-        avg_loss = torch.einsum('ij, ik -> ', is_legit.cpu().type(torch.LongTensor), total_loss.cpu().type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
-        return avg_loss
-
     def forward(self, x):
         return self.model.forward(x)
 
@@ -570,7 +562,7 @@ class RiskModel(Classifer):
         x, y_seq, y_mask, region_annotation_mask = self.get_xy(batch)
         y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
 
-        if self.use_attention:
+        if self.use_attention and stage == 'train':
             pred_loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
             attn_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
             loss = pred_loss + attn_loss
