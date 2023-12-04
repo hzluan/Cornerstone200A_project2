@@ -446,7 +446,7 @@ class ResNet183D(Classifer):
             return x,  alpha
 
 class R3D(Classifer):
-    def __init__(self, num_classes=2, init_lr=1e-3, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, num_classes=2, init_lr=1e-4, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
         self.pretrained = pretrained
@@ -467,9 +467,10 @@ class R3D(Classifer):
                                         padding=original_first_layer.padding, 
                                         bias=False)
 
-        new_first_layer.weight[:] = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
+        new_first_layer.weight[:].data  = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
 
-        setattr(self.resnet3d.stem, '0', new_first_layer)
+        # setattr(self.resnet3d.stem, '0', new_first_layer)
+        self.resnet3d.stem[0] = new_first_layer
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=512, out_channels=1,
                                     kernel_size=1, stride=1)
