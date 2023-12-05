@@ -38,10 +38,10 @@ class PathMnist(pl.LightningDataModule):
         if self.use_data_augmentation:
             self.train_transform = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(),
-                torchvision.transforms.RandomVerticalFlip(p=0.5),
-                torchvision.transforms.RandomHorizontalFlip(p=0.5),
-                torchvision.transforms.RandomRotation(degrees=180),
-                torchvision.transforms.RandomAffine(degrees=15)
+                # torchvision.transforms.RandomVerticalFlip(p=0.5),
+                # torchvision.transforms.RandomHorizontalFlip(p=0.5),
+                torchvision.transforms.RandomRotation(degrees=90),
+                # torchvision.transforms.RandomAffine(degrees=15)
             ])
         else:
             self.train_transform = torchvision.transforms.Compose([
@@ -127,8 +127,8 @@ class NLST(pl.LightningDataModule):
         if self.use_data_augmentation:
             transforms_dict = [
                             #    tio.RandomElasticDeformation(),
-                               tio.RandomFlip(),
-                               tio.RandomAffine(scales=(0.9, 1.2),degrees=180)]
+                            
+                               tio.RandomAffine(degrees=15)]
                             #    tio.RandomNoise()]
             self.train_transform = tio.transforms.Compose([
                 resample,
@@ -248,9 +248,10 @@ class NLST(pl.LightningDataModule):
                     dataset_majority.append(d)
                 else:
                     dataset_minority.append(d)
-            imbalance_ratio = len(dataset_majority) // len(dataset_minority)
+            negative_weight = 0.5 / len(dataset_majority)
+            positive_weight = 0.5 / len(dataset_minority)
             # make weight array for cancer data points
-            weights = [1 if sample['y'] == 0 else imbalance_ratio for sample in self.train.dataset]
+            weights = [negative_weight if sample['y'] == 0 else positive_weight for sample in self.train.dataset]
             # Weighted Random Sampler
             sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples=len(self.train), replacement=True)
             
