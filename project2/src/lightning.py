@@ -452,6 +452,7 @@ class R3D(Classifer):
         self.pretrained = pretrained
         self.use_attention = use_attention
 
+        self.mlp = nn.ModuleList()
         self.attn_final = nn.ModuleList()
 
         if self.pretrained:
@@ -471,6 +472,10 @@ class R3D(Classifer):
 
         self.resnet3d.stem[0] = new_first_layer
         self.resnet3d.avgpool = nn.AdaptiveMaxPool3d((1, 1, 1))
+
+        num_ftrs = self.resnet3d.fc.in_features
+        self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
+
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=512, out_channels=1,
                                     kernel_size=1, stride=1)
@@ -478,10 +483,7 @@ class R3D(Classifer):
             self.attn_final.append(nn.BatchNorm1d(128))
             self.attn_final.append(nn.ReLU())
             self.attn_final.append(nn.Linear(128, num_classes))
-            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
-        else:
-            num_ftrs = self.resnet3d.fc.in_features
-            self.resnet3d.fc = nn.Linear(num_ftrs, num_classes)
+            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-1])
 
     def forward(self, x):
         B, C, D, H, W = x.size()
