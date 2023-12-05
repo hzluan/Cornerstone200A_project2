@@ -469,8 +469,8 @@ class R3D(Classifer):
 
         new_first_layer.weight[:].data  = torch.mean(original_first_layer.weight, dim=1, keepdim=True)
 
-        # setattr(self.resnet3d.stem, '0', new_first_layer)
         self.resnet3d.stem[0] = new_first_layer
+        self.resnet3d.avgpool = nn.AdaptiveMaxPool3d((1, 1, 1))
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=512, out_channels=1,
                                     kernel_size=1, stride=1)
