@@ -10,6 +10,7 @@ from torchvision.models.swin_transformer import swin_v2_b
 import numpy as np
 from src.cindex import concordance_index
 from torchsummary import summary
+import pdb
 
 class Classifer(pl.LightningModule):
     def __init__(self, num_classes=9, init_lr=1e-4, use_attention=False):
@@ -33,12 +34,12 @@ class Classifer(pl.LightningModule):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
         is_legit = torch.sum(A, (1, 2, 3)) > 0
-        is_legit = is_legit.to('cuda')
+        is_legit = is_legit.to('cuda').type(torch.DoubleTensor)
         A_pool =  nn.AdaptiveMaxPool3d(alpha.size()[2:])
         A = A_pool(A)
-        likelihood = torch.einsum('ijklm, ijklm -> ij', alpha, A)
-        total_loss = -torch.log(likelihood.detach() + 10e-9)
-        avg_loss = torch.einsum('ij, ik -> ', is_legit.type(torch.LongTensor), total_loss.type(torch.LongTensor))/(torch.sum(is_legit)+10e-9)
+        likelihood = torch.sum(alpha*A, (2, 3, 4))
+        total_loss = -torch.log(likelihood + 10e-9)
+        avg_loss =  (is_legit*total_loss)/(torch.sum(is_legit)+10e-9)
         return avg_loss
     
     def get_xy(self, batch):
@@ -483,7 +484,7 @@ class R3D(Classifer):
             self.attn_final.append(nn.BatchNorm1d(128))
             self.attn_final.append(nn.ReLU())
             self.attn_final.append(nn.Linear(128, num_classes))
-            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-1])
+            self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
 
     def forward(self, x):
         B, C, D, H, W = x.size()
@@ -491,16 +492,11 @@ class R3D(Classifer):
         alpha = None
         if self.use_attention:
             alpha = self.attention(x)
-            B, C_new, D_new, H_new, W_new = alpha.shape
-            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D_new, H_new, W_new)
-            output = alpha*x
-            output = output.sum(dim=(2,3,4))
-            output = output.view(B, -1)
+            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
+            x = torch.sum(alpha*x, (2,3,4)).view(B, -1)
             for layer in self.attn_final:
-                output = layer(output)
-            return output, alpha
-        else:
-            return x,  alpha
+                x = layer(x)
+        return x,  alpha
  
 class SwinTransformer(Classifer):
     def __init__(self, num_classes=9, init_lr = 1e-3, pretrained=False, **kwargs):
@@ -528,7 +524,7 @@ NLST_CENSORING_DIST = {
     "5": 0.9461840310101468,
 }
 class RiskModel(Classifer):
-    def __init__(self, input_num_chan=1, num_classes=6, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, input_num_chan=1, num_classes=2, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
@@ -536,12 +532,50 @@ class RiskModel(Classifer):
 
         ## Maximum number of followups to predict (set to 6 for full risk prediction task)
         self.max_followup = max_followup
+        self.use_attention = use_attention
+
+        if self.use_attention:
+            self.attention = nn.Conv3d(in_channels=512, out_channels=1,
+                                    kernel_size=1, stride=1)
+            self.attn_final.append(nn.Linear(512, 128))
+            self.attn_final.append(nn.BatchNorm1d(128))
+            self.attn_final.append(nn.ReLU())
+            self.attn_final.append(nn.Linear(128, num_classes))
 
         # TODO: Initalize components of your model here
-        self.model = R3D(num_classes=max(max_followup, num_classes), init_lr=init_lr, pretrained=pretrained, use_attention=use_attention)
-
+        self.backbone = R3D(num_classes=num_classes, init_lr=init_lr, pretrained=pretrained, use_attention=False)
+        self.backbone = nn.Sequential(*list(self.backbone.resnet3d.children())[:-1])
+        self.mlp = nn.ModuleList()
+        for _ in range(max_followup):
+            self.mlp.append(nn.Sequential(nn.BatchNorm1d(512), nn.Linear(512, num_classes)))
+            
+    
     def forward(self, x):
-        return self.model.forward(x)
+        B, C, D, H, W = x.size()
+        x = self.backbone(x).view(B, 512)
+        alpha = None
+        # if self.use_attention:
+            # alpha = self.attention(x)
+            # B, C_new, D_new, H_new, W_new = alpha.shape
+            # alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D_new, H_new, W_new)
+            # output = alpha*x
+            # output = output.sum(dim=(2,3,4))
+            # output = output.view(B, -1)
+            # for layer in self.attn_final:
+            #     output = layer(output)
+            # return output, alpha
+        # else:
+        p = []
+        for i, layer in enumerate(self.mlp):
+            if i == 0:
+                h = layer(x)
+            else:
+                h = F.relu(layer(x)) + h
+            p.append(h)
+
+        p = torch.squeeze(torch.stack(p, dim=1), 2)
+
+        return p, alpha
 
     def get_xy(self, batch):
         """
@@ -564,14 +598,16 @@ class RiskModel(Classifer):
     def step(self, batch, batch_idx, stage, outputs):
         x, y_seq, y_mask, region_annotation_mask = self.get_xy(batch)
         y_hat, alpha = self.forward(x) ## (B, T) shape tensor of risk scores.
-
+        y_hat = y_hat[:, :, -1]
+        raw_loss = F.binary_cross_entropy_with_logits(y_hat, y_seq, reduction="none")
+        attention_loss = 0
         if self.use_attention and stage == 'train':
-            pred_loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
-            attn_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
-            loss = pred_loss + attn_loss
+            pred_loss = torch.sum(raw_loss*y_mask) / torch.sum(y_mask)
+            attention_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
+            loss = pred_loss + attention_loss
         else:
             attention_loss = 0
-            loss = torch.sum(self.loss*y_mask) / torch.sum(y_mask)
+            loss = torch.sum(raw_loss*y_mask) / torch.sum(y_mask)
         
         # TODO: Log any metrics you want to wandb
         metric_value = self.accuracy(y_hat, y_seq)
