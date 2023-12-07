@@ -6,17 +6,14 @@ from src.dataset import NLST
 def main():
     nlst = NLST(**vars(NLST))
     nlst.setup()
-    test_loader = nlst.test_dataloader()
+    # test_loader = nlst.test_dataloader()
+    test = nlst.test.dataset
     y_seq = []
     lung_rads = []
     i = 0
-    for x in test_loader:
-        y_seq.extend(x['y_seq'][0].tolist())
-        lung_rads.extend(x["lung_rads"].tolist())
-        i += 1
-        if i == 10:
-            break
-    print(y_seq)
+    for x in test:
+        y_seq.append(x['y_seq'][0])
+        lung_rads.append(x["lung_rads"])
 
 # import model predictions for test
 # calculate how many positives are captured by lung rad and model
@@ -38,7 +35,6 @@ def main():
             FP += 1
         elif y_seq[i] == 0 and lung_rads[i] == 0:
             TN += 1
-        print(i)
 
 
     print('###################')
@@ -47,6 +43,10 @@ def main():
     print('PPV is ' + str(TP / (TP + FP)))
     print('NPV is ' + str(TN / (TN + FN)))
     print('C-Index is ' + str((TP / (TP + FN) + TN / (TN + FP)) / 2))
+    print(TP)
+    print(FN)
+    print(FP)
+    print(TN)
 
 if __name__ == "__main__":
     main()

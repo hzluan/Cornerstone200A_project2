@@ -25,10 +25,11 @@ class Classifer(pl.LightningModule):
         
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.auc = torchmetrics.AUROC(task="binary" if self.num_classes == 2 else "multiclass", num_classes=self.num_classes)
-
+        self.tp = torchmetrics.ConfusionMatrix(num_classes=self.num_classes)
         self.training_outputs = []
         self.validation_outputs = []
         self.test_outputs = []
+        self.confmat = torchmetrics.ConfusionMatrix(num_classes=self.num_classes)
 
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
@@ -93,6 +94,7 @@ class Classifer(pl.LightningModule):
         y_hat, alpha = self.forward(x)
 
         loss = self.loss(y_hat, y)
+        self.confmat.update(y_hat, y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -131,6 +133,17 @@ class Classifer(pl.LightningModule):
             probs = F.softmax(y_hat, dim=-1)[:,-1]
         else:
             probs = F.softmax(y_hat, dim=-1)
+
+        confmat = self.confmat.compute()
+        TP = confmat.diag()
+        TN = confmat.sum(dim=1) - confmat.diag()
+        FP = confmat.sum(dim=0) - confmat.diag()
+        FN = confmat.sum(dim=0) - TP
+        self.log('TP', TP)
+        self.log('TN', TN)
+        self.log('FP', FP)
+        self.log('FN', FN)
+        self.confmat.reset()
 
         self.log("test_auc", self.auc(probs, y.view(-1)), sync_dist=True, prog_bar=True)
         self.test_outputs = []
