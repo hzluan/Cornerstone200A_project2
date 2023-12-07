@@ -33,13 +33,13 @@ class Classifer(pl.LightningModule):
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
         # view so dimension is batch, 1
-        is_legit = torch.sum(A, (1, 2, 3)) > 0
-        is_legit = is_legit.to('cuda').type(torch.DoubleTensor)
+        is_legit = torch.sum(A, (1, 2, 3, 4)) > 0
+        is_legit = is_legit.type(torch.DoubleTensor).to(A.device)
         A_pool =  nn.AdaptiveMaxPool3d(alpha.size()[2:])
         A = A_pool(A)
-        likelihood = torch.sum(alpha*A, (2, 3, 4))
+        likelihood = torch.sum(alpha*A, (1, 2, 3, 4))
         total_loss = -torch.log(likelihood + 10e-9)
-        avg_loss =  (is_legit*total_loss)/(torch.sum(is_legit)+10e-9)
+        avg_loss =  torch.sum(is_legit*total_loss)/(torch.sum(is_legit)+10e-9)
         return avg_loss
     
     def get_xy(self, batch):
@@ -56,11 +56,11 @@ class Classifer(pl.LightningModule):
 
         if self.use_attention:
             attention_loss = self.AttentionLoss(alpha, annotation_mask)
-            loss = attention_loss + self.loss(y_hat, y)
+            loss = attention_loss*0.05 + self.loss(y_hat, y)
         else:
             attention_loss = 0
             loss = self.loss(y_hat, y)
-
+        # import pdb; pdb.set_trace()
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         self.log('train_loss', loss, prog_bar=True)
         self.log('train_attention_loss', attention_loss, prog_bar=True)
@@ -480,22 +480,20 @@ class R3D(Classifer):
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=512, out_channels=1,
                                     kernel_size=1, stride=1)
-            self.attn_final.append(nn.Linear(512, 128))
-            self.attn_final.append(nn.BatchNorm1d(128))
-            self.attn_final.append(nn.ReLU())
-            self.attn_final.append(nn.Linear(128, num_classes))
+            self.attn_fc = nn.Linear(512, num_classes)
+     
             self.resnet3d = nn.Sequential(*list(self.resnet3d.children())[:-2])
 
     def forward(self, x):
-        B, C, D, H, W = x.size()
+        # import pdb; pdb.set_trace()
         x = self.resnet3d(x)
+        B, C, D, H, W = x.size()
         alpha = None
         if self.use_attention:
             alpha = self.attention(x)
             alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D, H, W)
             x = torch.sum(alpha*x, (2,3,4)).view(B, -1)
-            for layer in self.attn_final:
-                x = layer(x)
+            x = self.attn_fc(x)
         return x,  alpha
  
 class SwinTransformer(Classifer):
@@ -534,37 +532,30 @@ class RiskModel(Classifer):
         self.max_followup = max_followup
         self.use_attention = use_attention
 
+        # TODO: Initalize components of your model here
+        self.backbone = R3D(num_classes=num_classes, init_lr=init_lr, pretrained=pretrained, use_attention=False)
         if self.use_attention:
             self.attention = nn.Conv3d(in_channels=512, out_channels=1,
                                     kernel_size=1, stride=1)
-            self.attn_final.append(nn.Linear(512, 128))
-            self.attn_final.append(nn.BatchNorm1d(128))
-            self.attn_final.append(nn.ReLU())
-            self.attn_final.append(nn.Linear(128, num_classes))
+            self.backbone = nn.Sequential(*list(self.backbone.resnet3d.children())[:-2])
+        else:
+            self.backbone = nn.Sequential(*list(self.backbone.resnet3d.children())[:-1])
 
-        # TODO: Initalize components of your model here
-        self.backbone = R3D(num_classes=num_classes, init_lr=init_lr, pretrained=pretrained, use_attention=False)
-        self.backbone = nn.Sequential(*list(self.backbone.resnet3d.children())[:-1])
         self.mlp = nn.ModuleList()
         for _ in range(max_followup):
-            self.mlp.append(nn.Sequential(nn.BatchNorm1d(512), nn.Linear(512, num_classes)))
+            self.mlp.append(nn.Sequential(nn.Linear(512, num_classes)))
             
     
     def forward(self, x):
         B, C, D, H, W = x.size()
         x = self.backbone(x).view(B, 512)
+        B, C, D_n, H_n, W_n = x.size()
         alpha = None
-        # if self.use_attention:
-            # alpha = self.attention(x)
-            # B, C_new, D_new, H_new, W_new = alpha.shape
-            # alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D_new, H_new, W_new)
-            # output = alpha*x
-            # output = output.sum(dim=(2,3,4))
-            # output = output.view(B, -1)
-            # for layer in self.attn_final:
-            #     output = layer(output)
-            # return output, alpha
-        # else:
+        if self.use_attention:
+            alpha = self.attention(x)
+            alpha = F.softmax(alpha.view(B, -1), -1).view(B, 1, D_n, H_n, W_n)
+            x = torch.sum(alpha*x, (2,3,4)).view(B, -1)
+
         p = []
         for i, layer in enumerate(self.mlp):
             if i == 0:
@@ -604,7 +595,7 @@ class RiskModel(Classifer):
         if self.use_attention and stage == 'train':
             pred_loss = torch.sum(raw_loss*y_mask) / torch.sum(y_mask)
             attention_loss = self.AttentionLoss(alpha, region_annotation_mask)*y_mask
-            loss = pred_loss + attention_loss
+            loss = pred_loss + attention_loss*0.05
         else:
             attention_loss = 0
             loss = torch.sum(raw_loss*y_mask) / torch.sum(y_mask)
@@ -659,7 +650,7 @@ class RiskModel(Classifer):
         time_at_event = torch.cat([o["time_at_event"] for o in outputs])
 
         if y.sum() > 0 and self.max_followup == 6:
-            c_index = concordance_index(time_at_event.cpu().numpy(), y_hat.detach().cpu().numpy(), y.cpu().numpy(), NLST_CENSORING_DIST)
+            c_index = concordance_index(time_at_event.cpu().numpy(), y_hat.double().detach().cpu().numpy(), y.cpu().numpy(), NLST_CENSORING_DIST)
         else:
             c_index = 0
         self.log("{}_c_index".format(stage), c_index, sync_dist=True, prog_bar=True)

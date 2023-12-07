@@ -91,6 +91,7 @@ class NLST(pl.LightningDataModule):
             lungrads_path="/wynton/protected/project/cph/cornerstone/nlst-metadata/nlst_acc2lungrads.p",
             num_images=200,
             max_followup=6,
+            apply_followup=False,
             img_size = [256, 256],
             class_balance=False,
             **kwargs):
@@ -101,6 +102,7 @@ class NLST(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.max_followup = max_followup
+        self.apply_followup = apply_followup
 
         self.nlst_metadata_path = nlst_metadata_path
         self.nlst_dir = nlst_dir
@@ -244,7 +246,11 @@ class NLST(pl.LightningDataModule):
             dataset_majority = []
             dataset_minority = []
             for d in self.train.dataset:
-                if d['y_seq'][0] == 0:
+                if self.apply_followup:
+                    num = -1
+                else:
+                    num = 0
+                if d['y_seq'][num] == 0:
                     dataset_majority.append(d)
                 else:
                     dataset_minority.append(d)
