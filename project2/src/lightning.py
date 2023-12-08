@@ -25,11 +25,10 @@ class Classifer(pl.LightningModule):
         
         self.accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.auc = torchmetrics.AUROC(task="binary" if self.num_classes == 2 else "multiclass", num_classes=self.num_classes)
-        self.tp = torchmetrics.ConfusionMatrix(num_classes=self.num_classes)
         self.training_outputs = []
         self.validation_outputs = []
         self.test_outputs = []
-        self.confmat = torchmetrics.ConfusionMatrix(num_classes=self.num_classes)
+        self.confmat = torchmetrics.classification.BinaryConfusionMatrix()
 
     def AttentionLoss(self, alpha, A):
         # noremalise by things that have annpotations
@@ -94,7 +93,7 @@ class Classifer(pl.LightningModule):
         y_hat, alpha = self.forward(x)
 
         loss = self.loss(y_hat, y)
-        self.confmat.update(y_hat, y)
+        self.confmat.update(y_hat[:,-1], y)
 
         self.log('test_loss', loss, sync_dist=True, prog_bar=True)
         self.log('test_acc', self.accuracy(y_hat, y), sync_dist=True, prog_bar=True)
@@ -134,15 +133,33 @@ class Classifer(pl.LightningModule):
         else:
             probs = F.softmax(y_hat, dim=-1)
 
+        from sklearn.metrics import roc_auc_score, roc_curve
+        import matplotlib.pyplot as plt
+        # import pdb; pdb.set_trace()
+        auc = roc_auc_score(y.cpu().double().numpy(), probs.cpu().double().numpy())
+        nlst_fpr = 636/(636+5757)# FP/(FP+TN)
+        nlst_tpr = 66/(66+20)# TP/(TP+FN)
+        fpr, tpr, thresholds = roc_curve(y.cpu().double().numpy(), probs.cpu().double().numpy())
+        plt.plot(fpr, tpr)
+        plt.plot([nlst_fpr], [nlst_tpr], '.')
+        plt.legend([f'Best model AUC={np.round(auc, 2)}', 'LungRads'])
+        plt.plot([0,1], [0, 1], '--', color='gray', linewidth=1)
+        plt.title('ROC Curve')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.savefig('ROC curve best.png')
+        # plt.show()
+
         confmat = self.confmat.compute()
-        TP = confmat.diag()
-        TN = confmat.sum(dim=1) - confmat.diag()
-        FP = confmat.sum(dim=0) - confmat.diag()
-        FN = confmat.sum(dim=0) - TP
-        self.log('TP', TP)
-        self.log('TN', TN)
-        self.log('FP', FP)
-        self.log('FN', FN)
+        # import pdb; pdb.set_trace()
+        TP = confmat[1, 1]
+        TN = confmat[0, 0]
+        FP = confmat[0, 1]
+        FN = confmat[1, 0]
+        self.log('TP', TP, sync_dist=True)
+        self.log('TN', TN, sync_dist=True)
+        self.log('FP', FP, sync_dist=True)
+        self.log('FN', FN, sync_dist=True)
         self.confmat.reset()
 
         self.log("test_auc", self.auc(probs, y.view(-1)), sync_dist=True, prog_bar=True)
@@ -535,7 +552,7 @@ NLST_CENSORING_DIST = {
     "5": 0.9461840310101468,
 }
 class RiskModel(Classifer):
-    def __init__(self, input_num_chan=1, num_classes=2, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, **kwargs):
+    def __init__(self, input_num_chan=1, num_classes=2, init_lr=1e-3, max_followup=6, pretrained=False, use_attention=False, subgroup_analysis=False, **kwargs):
         super().__init__(num_classes=num_classes, init_lr=init_lr)
         self.save_hyperparameters()
 
@@ -544,6 +561,7 @@ class RiskModel(Classifer):
         ## Maximum number of followups to predict (set to 6 for full risk prediction task)
         self.max_followup = max_followup
         self.use_attention = use_attention
+        self.subgroup_analysis = subgroup_analysis
 
         # TODO: Initalize components of your model here
         self.backbone = R3D(num_classes=num_classes, init_lr=init_lr, pretrained=pretrained, use_attention=False)
@@ -633,7 +651,8 @@ class RiskModel(Classifer):
             "y_mask": y_mask, # Tensor of when the patient was observed
             "y_seq": y_seq, # Tensor of when the patient had cancer
             "y": batch["y"], # If patient has cancer within 6 years
-            "time_at_event": batch["time_at_event"] # Censor time
+            "time_at_event": batch["time_at_event"], # Censor time,
+            'risk_factors': batch['risk_factors']
         })
 
         return loss
